@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+  TERMINATED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  CASUAL
+  UNPAID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
+  HOLIDAY
+}
+
+enum PayrollStatus {
+  DRAFT
+  PAID
+}
+
+enum DocumentType {
+  CONTRACT
+  ID_PROOF
+  RESUME
+  CERTIFICATE
+  OTHER
+}
+
+model User {
+  id                 Int                  @id @default(autoincrement())
+  email              String               @unique @db.VarChar(190)
+  passwordHash       String               @db.VarChar(255)
+  role               Role                 @default(EMPLOYEE)
+  status             UserStatus           @default(ACTIVE)
+  lastLoginAt        DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  employee           Employee?
+  refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  activities         Activity[]
+  reviewedLeaves     Leave[]              @relation("LeaveReviewer")
+
+  @@index([role])
+  @@index([status])
+}
+
+model Employee {
+  id              Int                @id @default(autoincrement())
+  userId          Int                @unique
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeCode    String             @unique @db.VarChar(50)
+  firstName       String             @db.VarChar(100)
+  lastName        String             @db.VarChar(100)
+  email           String             @unique @db.VarChar(190)
+  phone           String?            @db.VarChar(30)
+  gender          Gender
+  dateOfBirth     DateTime?          @db.Date
+  address         String?            @db.VarChar(255)
+  city            String?            @db.VarChar(100)
+  state           String?            @db.VarChar(100)
+  postalCode      String?            @db.VarChar(20)
+  country         String?            @db.VarChar(100)
+  profileImageUrl String?            @db.VarChar(500)
+  designation     String             @db.VarChar(100)
+  joiningDate     DateTime           @db.Date
+  status          EmployeeStatus     @default(ACTIVE)
+  departmentId    Int?
+  department      Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  headedDepartment Department?       @relation("DepartmentHead")
+  salaryStructure SalaryStructure?
+  documents       EmployeeDocument[]
+  attendance      Attendance[]
+  leaves          Leave[]
+  leaveBalances   LeaveBalance[]
+  payrollRecords  PayrollRecord[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([departmentId])
+  @@index([status])
+}
+
+model Department {
+  id             Int         @id @default(autoincrement())
+  name           String      @unique @db.VarChar(100)
+  code           String      @unique @db.VarChar(20)
+  description    String?     @db.VarChar(500)
+  headEmployeeId Int?        @unique
+  headEmployee   Employee?   @relation("DepartmentHead", fields: [headEmployeeId], references: [id], onDelete: SetNull)
+  employees      Employee[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model EmployeeDocument {
+  id         Int          @id @default(autoincrement())
+  employeeId Int
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title      String       @db.VarChar(150)
+  type       DocumentType
+  fileUrl    String       @db.VarChar(500)
+  size       Int          @default(0)
+  createdAt  DateTime     @default(now())
+
+  @@index([employeeId])
+}
+
+model Attendance {
+  id           Int              @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date         DateTime         @db.Date
+  checkIn      DateTime?
+  checkOut     DateTime?
+  status       AttendanceStatus @default(PRESENT)
+  workingHours Float?
+  note         String?          @db.VarChar(255)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@index([employeeId])
+}
+
+model Leave {
+  id           Int          @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType
+  startDate    DateTime     @db.Date
+  endDate      DateTime     @db.Date
+  days         Int
+  reason       String       @db.VarChar(500)
+  status       LeaveStatus  @default(PENDING)
+  reviewNote   String?      @db.VarChar(500)
+  reviewedById Int?
+  reviewedBy   User?        @relation("LeaveReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate])
+}
+
+model LeaveBalance {
+  id         Int        @id @default(autoincrement())
+  employeeId Int
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  year       Int
+  leaveType  LeaveType
+  total      Int
+  used       Int        @default(0)
+
+  @@unique([employeeId, year, leaveType])
+  @@index([year])
+}
+
+model SalaryStructure {
+  id              Int      @id @default(autoincrement())
+  employeeId      Int      @unique
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  basic           Decimal  @db.Decimal(12, 2)
+  housing         Decimal? @db.Decimal(12, 2)
+  transport       Decimal? @db.Decimal(12, 2)
+  medical         Decimal? @db.Decimal(12, 2)
+  otherAllowances Decimal? @db.Decimal(12, 2)
+  deductions      Decimal? @db.Decimal(12, 2)
+  netSalary       Decimal  @db.Decimal(12, 2)
+  updatedAt       DateTime @updatedAt
+}
+
+model PayrollRecord {
+  id               Int           @id @default(autoincrement())
+  employeeId       Int
+  employee         Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month            Int
+  year             Int
+  structureSnapshot Json
+  earnings         Json
+  deductions       Json
+  netSalary        Decimal       @db.Decimal(12, 2)
+  status           PayrollStatus @default(DRAFT)
+  paidAt           DateTime?
+  createdAt        DateTime      @default(now())
+
+  @@unique([employeeId, month, year])
+  @@index([month, year])
+}
+
+model Activity {
+  id        Int       @id @default(autoincrement())
+  userId    Int?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  actorName String    @db.VarChar(150)
+  type      String    @db.VarChar(50)
+  message   String    @db.VarChar(500)
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @db.VarChar(255)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @db.VarChar(255)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model SystemSetting {
+  id        Int       @id @default(autoincrement())
+  key       String    @unique @db.VarChar(100)
+  value     String?   @db.Text
+  updatedAt DateTime  @updatedAt
+}
+
+model Holiday {
+  id   Int      @id @default(autoincrement())
+  name String   @db.VarChar(150)
+  date DateTime @db.Date
+
+  @@unique([date, name])
+  @@index([date])
+}

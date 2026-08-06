@@ -54,6 +54,10 @@ export interface Employee {
   departmentId: number | null;
   createdAt: string;
   updatedAt: string;
+  department?: Department | null;
+  salaryStructure?: SalaryStructure | null;
+  documents?: EmployeeDocument[];
+  user?: Pick<User, "id" | "email" | "role" | "status"> | null;
 }
 
 export interface Department {

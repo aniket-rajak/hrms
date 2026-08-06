@@ -101,7 +101,7 @@ export interface AdminDashboardData {
   pendingLeaves: number;
   newHiresThisMonth: number;
   pendingPayroll: number;
-  upcomingBirthdays: Employee[];
+  upcomingBirthdays: (Employee & { birthdayDate: string; daysUntil: number })[];
   recentActivities: ActivityDto[];
   monthlyAttendance: { month: string; present: number; absent: number; halfDay: number }[];
   departmentDistribution: { name: string; count: number }[];

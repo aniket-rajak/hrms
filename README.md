@@ -1,424 +1,136 @@
 # 💼 HR Management System (HRMS)
 
-A lightweight, modern, responsive, and production-ready Human Resource Management System built using **Next.js**, **Node.js**, **MySQL**, **TypeScript**, and **Cloudinary**.
+A lightweight, modern, production-ready Human Resource Management System built with **Next.js**, **Express**, **MySQL**, **TypeScript**, and **Cloudinary**.
 
-The goal of this project is to provide essential HR functionalities without making the application unnecessarily complex.
-
----
-
-# 🚀 Tech Stack
-
-## Frontend
-
-- Next.js 15+
-- TypeScript
-- Tailwind CSS
-- Shadcn UI
-- React Hook Form
-- Zod
-- TanStack Query
-- Axios
-- Framer Motion
-
-## Backend
-
-- Node.js
-- Express.js
-- TypeScript
-
-## Database
-
-- MySQL
-
-## Authentication
-
-- JWT Authentication
-- Refresh Token
-
-## Storage
-
-- Cloudinary (Free Tier)
-
-## Deployment
-
-| Service | Platform |
-|----------|----------|
-| Frontend | Vercel |
-| Backend | Render |
-| Database | Railway MySQL / Aiven MySQL |
-| Image Storage | Cloudinary |
+Essential HR functionality — no unnecessary complexity.
 
 ---
 
-# ✨ Project Goals
+## 🚀 Tech Stack
 
-- Lightweight
-- Responsive
-- User Friendly
-- Clean UI
-- Fully Functional
-- Easy to Maintain
-- Production Ready
-- Free Hosting Compatible
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS v4, shadcn/ui |
+| Backend | Node.js, Express, TypeScript |
+| Database | MySQL + Prisma ORM |
+| Auth | JWT (short-lived access + rotating refresh token) |
+| Validation | Zod (shared between frontend and backend) |
+| Forms | React Hook Form + Zod resolver |
+| Data fetching | TanStack Query + Axios |
+| Charts | Recharts |
+| Animations | Framer Motion (minimal) |
+| Storage | Cloudinary (free tier) |
+| Email | Nodemailer / SMTP (forgot-password reset links) |
+| PDF | pdfkit (salary slips, generated on the server) |
 
----
-
-# 👥 User Roles
-
-## Admin
-
-- Full System Access
-- Employee Management
-- Attendance Management
-- Leave Management
-- Payroll
-- Analytics
-- Settings
-- Dashboard
-
----
-
-## Employee
-
-- Dashboard
-- Profile
-- Attendance
-- Leave
-- Salary Slips
-- Account Settings
-
----
-
-# 📌 Project Roadmap
-
----
-
-# ✅ Phase 1 — Project Setup
-
-- [ ] Setup Next.js
-- [ ] Setup Express Server
-- [ ] Configure MySQL
-- [ ] Configure TypeScript
-- [ ] Setup Tailwind CSS
-- [ ] Setup Shadcn UI
-- [ ] Setup Environment Variables
-- [ ] Configure Cloudinary
-- [ ] Folder Structure
-- [ ] Git Initialization
-
----
-
-# ✅ Phase 2 — Authentication
-
-- [ ] Admin Login
-- [ ] Employee Login
-- [ ] JWT Authentication
-- [ ] Refresh Token
-- [ ] Protected Routes
-- [ ] Role Based Authentication
-- [ ] Forgot Password
-- [ ] Reset Password
-
----
-
-# ✅ Phase 3 — Employee Management
-
-- [ ] Add Employee
-- [ ] Edit Employee
-- [ ] Delete Employee
-- [ ] Employee Details
-- [ ] Upload Profile Picture
-- [ ] Upload Documents
-- [ ] Employee Status
-- [ ] Search Employee
-- [ ] Pagination
-
----
-
-# ✅ Phase 4 — Department Management
-
-- [ ] Create Department
-- [ ] Edit Department
-- [ ] Delete Department
-- [ ] Department Head
-
----
-
-# ✅ Phase 5 — Attendance
-
-- [ ] Daily Check In
-- [ ] Daily Check Out
-- [ ] Attendance History
-- [ ] Monthly Attendance
-- [ ] Working Hours Calculation
-
----
-
-# ✅ Phase 6 — Leave Management
-
-- [ ] Apply Leave
-- [ ] Approve Leave
-- [ ] Reject Leave
-- [ ] Leave Balance
-- [ ] Leave History
-
----
-
-# ✅ Phase 7 — Payroll
-
-- [ ] Salary Structure
-- [ ] Monthly Salary
-- [ ] Salary Slip
-- [ ] PDF Download
-
----
-
-# ✅ Phase 8 — Dashboard
-
-- [ ] Dashboard Overview
-- [ ] Employee Count
-- [ ] Attendance Summary
-- [ ] Leave Summary
-- [ ] Payroll Summary
-- [ ] Recent Activities
-- [ ] Upcoming Birthdays
-
----
-
-# ✅ Phase 9 — Admin Panel
-
-Admin controls every module.
-
-### Employee
-
-- [ ] Manage Employees
-
-### Department
-
-- [ ] Manage Departments
-
-### Attendance
-
-- [ ] Manage Attendance
-
-### Leave
-
-- [ ] Approve Leaves
-
-### Payroll
-
-- [ ] Manage Payroll
-
-### Users
-
-- [ ] Roles
-- [ ] Permissions
-
-### Settings
-
-- [ ] Company Details
-- [ ] Company Logo
-- [ ] Cloudinary
-- [ ] JWT
-- [ ] Profile Settings
-
----
-
-# ✅ Phase 10 — Analytics
-
-- [ ] Total Employees
-- [ ] Attendance Chart
-- [ ] Leave Statistics
-- [ ] Payroll Summary
-- [ ] Department Distribution
-- [ ] Recent Activities
-
----
-
-# 🎨 UI Features
-
-- Responsive Design
-- Mobile Friendly
-- Desktop Friendly
-- Dark Mode
-- Light Mode
-- Sidebar Navigation
-- Dashboard Cards
-- Search
-- Filter
-- Pagination
-- Toast Notification
-- Confirmation Dialog
-- Skeleton Loading
-- Empty States
-- Error States
-- Professional Color Palette
-- User Friendly UX
-
----
-
-# 📂 Folder Structure
+## 🗂️ Monorepo Structure
 
 ```
-HRMS
-
-frontend/
-backend/
-database/
-docs/
-
-frontend/src
-
-app/
-components/
-hooks/
-services/
-types/
-utils/
-lib/
-styles/
-
-backend/src
-
-controllers/
-routes/
-middlewares/
-models/
-services/
-utils/
-config/
-
-database/
-
-schema.sql
-
-README.md
+hr-management-system/
+├── backend/          # Express + Prisma API
+│   ├── prisma/       # schema.prisma, seed.ts
+│   └── src/
+│       ├── config/   # env, db, prisma client
+│       ├── middleware/ # auth, requireRole, validate, errorHandler
+│       ├── routes/   # module route definitions
+│       ├── services/ # business logic (auth, employees, payroll, mail…)
+│       ├── utils/    # helpers (jwt, password, pdf slip…)
+│       └── app.ts, server.ts
+├── shared/           # @hrms/shared — types, DTOs, Zod schemas, constants
+├── frontend/         # Next.js app
+│   └── src/
+│       ├── app/      # routes (auth pages, dashboard pages)
+│       ├── components/ # ui (shadcn), shared, layout, forms, dashboard
+│       ├── hooks/    # TanStack Query hooks
+│       ├── lib/      # api client, format utils, cloudinary upload
+│       ├── providers/  # auth provider, query client, theme
+│       ├── services/   # typed API callers
+│       └── proxy.ts    # Next.js middleware (auth route guard)
+└── database/schema.sql # generated DDL snapshot
 ```
 
----
+## 👥 User Roles
 
-# 🔐 Security
+**Admin** — full access: dashboard, employees, departments, attendance management, leave approvals, payroll generation, analytics, settings.
 
-- JWT Authentication
-- Password Hashing
-- Protected APIs
-- Input Validation
-- Secure Environment Variables
-- Cloudinary Secure Upload
-- Role Based Access Control
+**Employee** — dashboard, profile, check in/out, attendance history, leave requests, salary slips, change password.
 
----
+## ✨ Features
 
-# 📊 Admin Dashboard Widgets
+- **Auth** — login, JWT access token (15 min) + refresh token rotation (7-day httpOnly cookie), protected routes, role-based access, forgot/reset password with email links
+- **Employees** — create/edit/deactivate, search, filter by department, pagination, profile pictures, document uploads, salary structures
+- **Departments** — CRUD with employee counts
+- **Attendance** — check in/out, working-hours calculation, monthly history, admin corrections
+- **Leave** — annual/sick/casual/unpaid quotas, apply, approve/reject with balance checks
+- **Payroll** — monthly generation with full-time pro-rated adjustment, mark paid, PDF salary slips
+- **Analytics** — attendance trend, hiring trend, leave stats, department distribution, payroll summary, activity feed
+- **Settings** — company profile, logo, holidays, password change
+- **UX** — responsive (mobile-first with slide-over sidebar), dark/light mode, breadcrumbs, skeletons, toasts, empty/error states, confirm dialogs
 
-- Total Employees
-- Present Today
-- Absent Today
-- Pending Leaves
-- Departments
-- Payroll Summary
-- Recent Activities
-- New Employees
-- Attendance Graph
-- Leave Graph
+## 🔒 Security
 
----
+- bcrypt password hashing, default password force-reset on first login
+- Refresh tokens stored hashed, rotated on every refresh, revoked on logout
+- Helmet, CORS (frontend origin only), per-route rate limiting
+- Zod validation on every endpoint; users can only access their own data
+- Payroll PDFs require admin or the owner employee
 
-# 👤 Employee Dashboard Widgets
+## 📁 Environment Variables
 
-- Today's Attendance
-- Leave Balance
-- Salary Slip
-- Upcoming Holidays
-- Personal Information
-- Recent Attendance
+See `backend/.env.example` (server, DATABASE_URL, JWT secrets, Cloudinary, SMTP, seed credentials) and `frontend/.env.example` (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`).
 
----
+## 🚀 Quick Start
 
-# 📦 API Modules
+```bash
+npm install
+npm run build --workspace @hrms/shared
 
-- Authentication
-- Employees
-- Departments
-- Attendance
-- Leave
-- Payroll
-- Dashboard
-- Analytics
-- Settings
+# 1. Configure backend/.env and frontend/.env from the examples
 
----
+# 2. Database
+cd backend
+npx prisma db push      # create tables
+npm run seed            # admin user + demo data
 
-# 📋 Pending Work
+# 3. Run
+npm run dev --workspace backend   # API on :5000
+npm run dev --workspace frontend  # app on :3000
+```
 
-## High Priority
+Sign in with the seeded admin (default `admin@hrms.com` / `Admin@123`, overridable via `SEED_ADMIN_*`).
 
-- [ ] Authentication
-- [ ] Employee CRUD
-- [ ] Attendance
-- [ ] Leave Management
-- [ ] Dashboard
-- [ ] Payroll
-- [ ] Analytics
+## 📄 Documentation
 
----
+- [Installation](docs/INSTALLATION.md)
+- [API Reference](docs/API.md)
+- [Deployment](docs/DEPLOYMENT.md) (Vercel · Render · Railway · Cloudinary)
+- [Testing](docs/TESTING.md)
 
-## Medium Priority
+## 🧪 Scripts
 
-- [ ] Email Notifications
-- [ ] PDF Salary Slip
-- [ ] Company Settings
-- [ ] Profile Upload
-- [ ] Search & Filter
+| Command | Description |
+|---------|-------------|
+| `npm run dev --workspace backend` | Dev server with hot reload |
+| `npm run dev --workspace frontend` | Next.js dev server |
+| `npm run build --workspace backend` | Type-check + compile backend |
+| `npm run build --workspace frontend` | Type-check + build frontend |
+| `npm run lint --workspace frontend` | ESLint (frontend) |
+| `npm run seed --workspace backend` | Seed database with demo data |
 
----
+## ☁️ Deployment
 
-## Low Priority
+Free-tier friendly: **Vercel** (frontend), **Render** (backend), **Railway/Aiven MySQL** (database), **Cloudinary** (uploads). Full guide in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-- [ ] Export Excel
-- [ ] Import Employees
-- [ ] Audit Logs
-- [ ] Activity Timeline
+## 🗺️ Future Improvements
 
----
+- Email notifications on leave status changes and payroll release
+- Document OCR / resume parsing on employee creation
+- CSV/Excel import-export for employees and attendance
+- Advanced permissions (department-scoped admins)
+- Two-factor authentication
+- Payslip email delivery in addition to download
+- Overtime tracking and approval workflows
 
-# 🧪 Testing Checklist
+## 🧑‍💻 Contributing & License
 
-- [ ] Authentication
-- [ ] CRUD Operations
-- [ ] Attendance
-- [ ] Leave
-- [ ] Payroll
-- [ ] Dashboard
-- [ ] Responsive Design
-- [ ] API Testing
-- [ ] Validation
-- [ ] Error Handling
-
----
-
-# 📈 Future Improvements
-
-- Biometric Integration
-- Face Recognition Attendance
-- Mobile App
-- Email Notifications
-- WhatsApp Notifications
-- Multi Company Support
-- Multi Language
-- AI Analytics
-- Employee Performance Module
-
----
-
-# 📄 License
-
-MIT License
-
----
-
-# ❤️ Developed With
-
-Next.js ❤️ Node.js ❤️ TypeScript ❤️ MySQL ❤️ Cloudinary
-
-Built with a focus on simplicity, scalability, and maintainability while using a completely free deployment stack.
+Private project — built for learning and production demonstration.

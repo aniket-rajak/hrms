@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { AuthMeResponse, LoginResponse } from '@hrms/shared';
+import { AuthMeResponse, Employee, LoginResponse } from '@hrms/shared';
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
 import { ApiError } from '../lib/errors';
@@ -40,16 +40,37 @@ export function serializeAuthUser(user: {
   };
 }
 
-function serializeEmployee(employee: unknown): Record<string, unknown> {
-  if (!employee || typeof employee !== 'object') return {};
-  const record = employee as Record<string, unknown>;
+type EmployeeRecord = {
+  [key: string]: unknown;
+  dateOfBirth: Date | null;
+  joiningDate: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function serializeEmployee(employee: unknown): Employee {
+  const record = employee as EmployeeRecord;
   return {
-    ...record,
-    dateOfBirth: record.dateOfBirth ? (record.dateOfBirth as Date).toISOString() : null,
-    joiningDate: (record.joiningDate as Date).toISOString(),
-    createdAt: (record.createdAt as Date).toISOString(),
-    updatedAt: (record.updatedAt as Date).toISOString(),
-  };
+    ...(record as unknown as Employee),
+    dateOfBirth: record.dateOfBirth ? record.dateOfBirth.toISOString() : null,
+    joiningDate: record.joiningDate.toISOString(),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    department: record.department
+      ? {
+          ...(record.department as Record<string, unknown>),
+          createdAt: (record.department as { createdAt: Date }).createdAt.toISOString(),
+          updatedAt: (record.department as { updatedAt: Date }).updatedAt.toISOString(),
+        }
+      : null,
+    salaryStructure: record.salaryStructure
+      ? {
+          ...(record.salaryStructure as Record<string, unknown>),
+          createdAt: (record.salaryStructure as { createdAt: Date }).createdAt.toISOString(),
+          updatedAt: (record.salaryStructure as { updatedAt: Date }).updatedAt.toISOString(),
+        }
+      : null,
+  } as Employee;
 }
 
 async function issueRefreshToken(userId: number): Promise<string> {
@@ -193,26 +214,7 @@ export async function getAuthUser(userId: number): Promise<AuthMeResponse> {
   });
   if (!user) throw ApiError.notFound('User not found');
 
-  return {
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    },
-    employee: user.employee
-      ? {
-          ...user.employee,
-          dateOfBirth: user.employee.dateOfBirth ? user.employee.dateOfBirth.toISOString() : null,
-          joiningDate: user.employee.joiningDate.toISOString(),
-          createdAt: user.employee.createdAt.toISOString(),
-          updatedAt: user.employee.updatedAt.toISOString(),
-        }
-      : null,
-  };
+  return serializeAuthUser(user);
 }
 
 export async function ensureLeaveBalances(employeeId: number, year: number): Promise<void> {

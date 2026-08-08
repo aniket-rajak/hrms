@@ -26,6 +26,8 @@ Alternative hosts: any MongoDB provider (Railway, DigitalOcean, self-hosted `mon
 
 ## 2. Backend (Render)
 
+Live deployment: **https://hrms-9ypm.onrender.com** (health check `/health`).
+
 1. Create a new **Web Service** pointing at your repo.
 2. **Root directory:** `backend`
 3. **Build command:** `npm install && npm run build`
@@ -34,7 +36,8 @@ Alternative hosts: any MongoDB provider (Railway, DigitalOcean, self-hosted `mon
    - `NODE_ENV=production`
    - `DATABASE_URL` (MongoDB Atlas connection string)
    - `JWT_SECRET`, `JWT_REFRESH_SECRET` (long random strings)
-   - `FRONTEND_URL` → your Vercel URL
+   - `CORS_ORIGINS` → comma-separated frontend origins, e.g. `https://<your-app>.vercel.app,http://localhost:3000`
+   - `FRONTEND_URL` → your Vercel URL (used for password-reset links)
    - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
    - `EMAIL_PROVIDER`, `BREVO_API_KEY`, `EMAIL_FROM` (Brevo HTTP API — required on Render free, which blocks SMTP)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (SMTP fallback)
@@ -45,17 +48,17 @@ Alternative hosts: any MongoDB provider (Railway, DigitalOcean, self-hosted `mon
 > `npm install && npm run build --workspace @hrms/shared && npm run build --workspace backend` and start command
 > `npm start --workspace backend`.
 
+> **Note (already resolved):** the committed repo keeps `typescript` + all `@types/*` in `dependencies` (not `devDependencies`) so the backend also builds when Render installs with `NODE_ENV=production` (which prunes dev deps).
+
 ## 3. Frontend (Vercel)
 
 1. Import the repo; Vercel auto-detects Next.js.
 2. **Root directory:** `frontend` — or import at repo root with the detected config (the repo root `package.json` is an npm-workspaces manifest; Vercel works best with root directory `frontend`).
 3. Install command: `npm install` (workspaces are hoisted to the repo root; keep the default).
-4. Build command: `npm run build` — ensure `@hrms/shared` is built first. Either:
-   - Add `"prebuild": "npm run build --workspace @hrms/shared"` to `frontend/package.json`, or
-   - Use a root-level install step in Vercel settings.
-5. Environment variables:
-   - `NEXT_PUBLIC_API_URL` → `https://<your-backend>.onrender.com/api`
-   - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` → your cloud name
+4. Build command: `npm run build` — the `frontend/package.json` already has `"prebuild": "npm run build --workspace @hrms/shared"` so the shared workspace is built automatically inside the workspace context.
+5. Environment variables (must be set for the production build):
+   - `NEXT_PUBLIC_API_URL` → `https://hrms-9ypm.onrender.com/api` (production backend)
+   - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` → your cloud name (fallback for image URLs; uploads are signed by the backend `/uploads/signature`)
 
 ### Vercel + Render cookie caveat
 

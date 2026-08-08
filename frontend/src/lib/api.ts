@@ -4,7 +4,10 @@ import {
   type ApiResponse,
 } from "@hrms/shared";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api";
+const apiConfigured = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000").replace(/\/+$/, "");
+export const API_URL = apiConfigured.toLowerCase().endsWith("/api")
+  ? apiConfigured
+  : `${apiConfigured}/api`;
 
 export const api = axios.create({
   baseURL: API_URL,

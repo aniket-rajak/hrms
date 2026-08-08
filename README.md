@@ -24,6 +24,13 @@ Essential HR functionality — no unnecessary complexity.
 | Hosting | Render (API) · Vercel (frontend) · MongoDB Atlas |
 | PDF | pdfkit (salary slips, generated on the server) |
 
+## 🌐 Live Deployment
+
+| Service | URL |
+|---------|-----|
+| Frontend (Vercel) | https://hrms-frontend-five-ivory.vercel.app |
+| Backend API (Render) | https://hrms-9ypm.onrender.com (`/health` for status) |
+
 ## 🗂️ Monorepo Structure
 
 ```
@@ -59,7 +66,7 @@ hr-management-system/
 
 ## ✨ Features
 
-- **Auth** — login, JWT access token (15 min) + refresh token rotation (7-day httpOnly cookie), protected routes, role-based access, forgot/reset password with email links
+- **Auth** — login, JWT access token (15 min) + refresh token rotation (7-day httpOnly cookie), protected routes, role-based access, forgot/reset password with email links, password visibility eye toggle (admin + employee panels)
 - **Credentials** — admins set a custom starting password when creating an employee (no hidden defaults); admins can view any employee's User ID & password, employees only their own — all masked by default with an eye-icon toggle
 - **Employees** — create/edit/deactivate, search, filter by department, pagination, profile pictures, document uploads, salary structures
 - **Departments** — CRUD with employee counts
@@ -84,6 +91,12 @@ hr-management-system/
 ## 📁 Environment Variables
 
 Dev copies are already created: `backend/.env` and `frontend/.env` (working dev defaults — only `DATABASE_URL` needs your database credentials). Templates live at `backend/.env.example` and `frontend/.env.example` (server, DATABASE_URL, JWT secrets, Cloudinary, email, seed credentials; and `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`).
+
+| Scope | Variables |
+|-------|-----------|
+| Local backend (`backend/.env`) | `FRONTEND_URL=http://localhost:3000` (default — drives CORS + reset links) |
+| Render (production backend) | `NODE_ENV=production`, `FRONTEND_URL=https://hrms-frontend-five-ivory.vercel.app`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CLOUDINARY_*`, `EMAIL_PROVIDER`/`BREVO_API_KEY`/`SMTP_*` |
+| Vercel (production frontend) | `NEXT_PUBLIC_API_URL=https://hrms-9ypm.onrender.com/api`, `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=doowwkmbe` |
 
 Email is provider-switchable: set `BREVO_API_KEY` → **Brevo HTTP API** (recommended — works on Render's free tier, which blocks SMTP); otherwise `SMTP_*` (e.g. Hostinger) is used via Nodemailer; with neither, reset links fall back to the server console.
 
@@ -128,6 +141,10 @@ Sign in with the seeded admin (default `admin@hrms.com` / `Admin@123`, overridab
 
 Free-tier friendly: **Vercel** (frontend), **Render** (backend), **MongoDB Atlas M0** (database), **Cloudinary** (uploads). Note: Render's free tier blocks SMTP — use the Brevo HTTP API for email there. Full guide in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+- **Frontend** → Vercel: import the repo, root directory `frontend`, env vars `NEXT_PUBLIC_API_URL` + `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`
+- **Backend** → Render: whole repo, build `npm install && npm run build --workspace @hrms/backend`, start `npm start --workspace backend`, env vars `NODE_ENV=production`, `FRONTEND_URL`, `DATABASE_URL`, JWT + Cloudinary + email secrets
+- `FRONTEND_URL` is the single source of truth for CORS — the local origin `http://localhost:3000` is always allowed too, so local dev and production coexist.
+
 ## 📋 Pending Tasks (To Be Completed Later)
 
 ### Environment & Database
@@ -153,8 +170,9 @@ Free-tier friendly: **Vercel** (frontend), **Render** (backend), **MongoDB Atlas
 
 ### Deployment
 - [x] Provision MongoDB Atlas (M0 free shared cluster) for production
-- [ ] Deploy backend to Render with production env vars
-- [ ] Deploy frontend to Vercel
+- [x] Deploy backend to Render with production env vars → https://hrms-9ypm.onrender.com
+- [x] Deploy frontend to Vercel → https://hrms-frontend-five-ivory.vercel.app
+- [x] Cross-origin auth (cookies + CORS) verified for Vercel ↔ Render
 - [ ] Post-deploy checklist (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 
 ## 🗺️ Future Improvements

@@ -85,7 +85,7 @@ router.patch(
   authorize('ADMIN'),
   validate(attendanceUpdateSchema),
   asyncHandler(async (req: AuthRequest, res) => {
-    const record = await attendanceService.updateAttendance(Number(req.params.id), req.body, req.user!);
+    const record = await attendanceService.updateAttendance(req.params.id, req.body, req.user!);
     ok(res, record, 'Attendance updated');
   }),
 );

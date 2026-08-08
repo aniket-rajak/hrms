@@ -1,41 +1,36 @@
 import { LeaveApplyInput, LeaveReviewInput, LeaveType, Paginated } from '@hrms/shared';
-import { prisma } from '../lib/prisma';
+import { Employee, Leave, LeaveBalance } from '../models';
 import { ApiError } from '../lib/errors';
 import { PaginationParams, paginated } from '../utils/pagination';
 import { countDaysInclusive, currentYear, endOfDay, startOfDay } from '../utils/dates';
 import { logActivity } from './activity.service';
 import { getLeaveQuotas } from './auth.service';
+import { oid, toPlain, withTransaction } from '../lib/db';
+import { ciRegex } from '../utils/query';
 
-const employeePick = {
-  select: {
-    id: true,
-    firstName: true,
-    lastName: true,
-    employeeCode: true,
-    profileImageUrl: true,
-  },
-} as const;
+const employeePickPopulate = { path: 'employee', select: 'firstName lastName employeeCode profileImageUrl' };
 
-function serializeLeave(leave: Record<string, unknown>) {
-  const employee = leave.employee as Record<string, unknown> | null | undefined;
-  const reviewedBy = leave.reviewedBy as Record<string, unknown> | null | undefined;
+function serializeLeave(leave: unknown) {
+  const l = toPlain<Record<string, unknown>>(leave);
+  const employee = l.employee as Record<string, unknown> | null | undefined;
+  const reviewedBy = l.reviewedBy as Record<string, unknown> | null | undefined;
   return {
-    id: leave.id as number,
-    employeeId: leave.employeeId as number,
-    leaveType: leave.leaveType as LeaveType,
-    startDate: (leave.startDate as Date).toISOString(),
-    endDate: (leave.endDate as Date).toISOString(),
-    days: leave.days as number,
-    reason: leave.reason as string,
-    status: leave.status as string,
-    reviewNote: (leave.reviewNote as string | null) ?? null,
-    reviewedById: (leave.reviewedById as number | null) ?? null,
-    reviewedAt: leave.reviewedAt ? (leave.reviewedAt as Date).toISOString() : null,
-    createdAt: (leave.createdAt as Date).toISOString(),
-    updatedAt: (leave.updatedAt as Date).toISOString(),
+    id: l.id as string,
+    employeeId: l.employeeId as string,
+    leaveType: l.leaveType as LeaveType,
+    startDate: new Date(l.startDate as Date).toISOString(),
+    endDate: new Date(l.endDate as Date).toISOString(),
+    days: l.days as number,
+    reason: l.reason as string,
+    status: l.status as string,
+    reviewNote: (l.reviewNote as string | null) ?? null,
+    reviewedById: (l.reviewedById as string | null) ?? null,
+    reviewedAt: l.reviewedAt ? new Date(l.reviewedAt as Date).toISOString() : null,
+    createdAt: new Date(l.createdAt as Date).toISOString(),
+    updatedAt: new Date(l.updatedAt as Date).toISOString(),
     employee: employee
       ? {
-          id: employee.id as number,
+          id: employee.id as string,
           firstName: employee.firstName as string,
           lastName: employee.lastName as string,
           employeeCode: employee.employeeCode as string,
@@ -46,8 +41,8 @@ function serializeLeave(leave: Record<string, unknown>) {
   };
 }
 
-export async function applyLeave(employeeId: number, data: LeaveApplyInput, actorName: string) {
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+export async function applyLeave(employeeId: string, data: LeaveApplyInput, actorName: string) {
+  const employee = await Employee.findById(oid(employeeId));
   if (!employee) throw ApiError.notFound('Employee not found');
 
   const startDate = startOfDay(data.startDate);
@@ -56,8 +51,10 @@ export async function applyLeave(employeeId: number, data: LeaveApplyInput, acto
 
   if (data.leaveType !== 'UNPAID') {
     const year = startDate.getFullYear();
-    const balance = await prisma.leaveBalance.findUnique({
-      where: { employeeId_year_leaveType: { employeeId, year, leaveType: data.leaveType } },
+    const balance = await LeaveBalance.findOne({
+      employeeId: oid(employeeId),
+      year,
+      leaveType: data.leaveType,
     });
     if (!balance) throw ApiError.badRequest('Leave balance not found for this year. Contact admin.');
     const remaining = balance.total - balance.used;
@@ -68,17 +65,16 @@ export async function applyLeave(employeeId: number, data: LeaveApplyInput, acto
     }
   }
 
-  const leave = await prisma.leave.create({
-    data: {
-      employeeId,
-      leaveType: data.leaveType,
-      startDate,
-      endDate,
-      days,
-      reason: data.reason,
-    },
-    include: { employee: employeePick },
+  const leave = await Leave.create({
+    employeeId: oid(employeeId),
+    leaveType: data.leaveType,
+    startDate,
+    endDate,
+    days,
+    reason: data.reason,
   });
+
+  const populated = await Leave.findById(leave._id).populate(employeePickPopulate);
 
   await logActivity({
     actorName,
@@ -86,23 +82,21 @@ export async function applyLeave(employeeId: number, data: LeaveApplyInput, acto
     message: `Applied for ${days} day(s) of ${data.leaveType.toLowerCase()} leave (${startOfDay(startDate).toISOString().slice(0, 10)} to ${endOfDay(endDate).toISOString().slice(0, 10)})`,
   });
 
-  return serializeLeave(leave as never);
+  return serializeLeave(populated);
 }
 
-export async function listMine(employeeId: number, params: PaginationParams & { status?: string }) {
-  const where: Record<string, unknown> = { employeeId };
+export async function listMine(employeeId: string, params: PaginationParams & { status?: string }) {
+  const where: Record<string, unknown> = { employeeId: oid(employeeId) };
   if (params.status) where.status = params.status;
 
   const [leaves, total] = await Promise.all([
-    prisma.leave.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (params.page - 1) * params.pageSize,
-      take: params.pageSize,
-    }),
-    prisma.leave.count({ where }),
+    Leave.find(where)
+      .sort({ createdAt: -1 })
+      .skip((params.page - 1) * params.pageSize)
+      .limit(params.pageSize),
+    Leave.countDocuments(where),
   ]);
-  return paginated(leaves.map((l) => serializeLeave(l as never)), total, params);
+  return paginated(leaves.map((l) => serializeLeave(l)), total, params);
 }
 
 export async function listAll(params: PaginationParams & { status?: string; search?: string }) {
@@ -110,89 +104,80 @@ export async function listAll(params: PaginationParams & { status?: string; sear
   if (params.status) where.status = params.status;
   if (params.search) {
     const term = params.search.trim();
-    where.employee = {
-      OR: [
-        { firstName: { contains: term } },
-        { lastName: { contains: term } },
-        { employeeCode: { contains: term } },
+    const matches = await Employee.find({
+      $or: [
+        { firstName: ciRegex(term) },
+        { lastName: ciRegex(term) },
+        { employeeCode: ciRegex(term) },
       ],
-    };
+    }).select('_id');
+    where.employeeId = { $in: matches.map((m) => m._id) };
   }
 
   const [leaves, total] = await Promise.all([
-    prisma.leave.findMany({
-      where,
-      include: { employee: employeePick },
-      orderBy: { createdAt: 'desc' },
-      skip: (params.page - 1) * params.pageSize,
-      take: params.pageSize,
-    }),
-    prisma.leave.count({ where }),
+    Leave.find(where)
+      .populate(employeePickPopulate)
+      .sort({ createdAt: -1 })
+      .skip((params.page - 1) * params.pageSize)
+      .limit(params.pageSize),
+    Leave.countDocuments(where),
   ]);
-  return paginated(leaves.map((l) => serializeLeave(l as never)), total, params);
+  return paginated(leaves.map((l) => serializeLeave(l)), total, params);
 }
 
 export async function reviewLeave(
-  id: number,
+  id: string,
   action: 'APPROVE' | 'REJECT',
-  reviewer: { id: number; email: string },
+  reviewer: { id: string; email: string },
   note?: string | null,
 ) {
-  const leave = await prisma.leave.findUnique({ where: { id }, include: { employee: true } });
+  const leave = await Leave.findById(oid(id)).populate('employee');
   if (!leave) throw ApiError.notFound('Leave request not found');
   if (leave.status !== 'PENDING') throw ApiError.conflict('This request has already been reviewed');
 
   const status = action === 'APPROVE' ? 'APPROVED' : 'REJECTED';
 
-  await prisma.$transaction(async (tx) => {
-    await tx.leave.update({
-      where: { id },
-      data: { status, reviewNote: note || null, reviewedById: reviewer.id, reviewedAt: new Date() },
-    });
+  await withTransaction(async (session) => {
+    await Leave.updateOne(
+      { _id: leave._id },
+      { status, reviewNote: note || null, reviewedById: oid(reviewer.id), reviewedAt: new Date() },
+      { session },
+    );
 
     if (action === 'APPROVE' && leave.leaveType !== 'UNPAID') {
       const year = leave.startDate.getFullYear();
-      const balance = await tx.leaveBalance.findUnique({
-        where: {
-          employeeId_year_leaveType: {
-            employeeId: leave.employeeId,
-            year,
-            leaveType: leave.leaveType,
-          },
-        },
-      });
+      const balance = await LeaveBalance.findOne({
+        employeeId: leave.employeeId,
+        year,
+        leaveType: leave.leaveType,
+      }).session(session);
       if (balance) {
-        await tx.leaveBalance.update({
-          where: { id: balance.id },
-          data: { used: balance.used + leave.days },
-        });
+        await LeaveBalance.updateOne({ _id: balance._id }, { $inc: { used: leave.days } }, { session });
       }
       if (leave.startDate <= startOfDay(new Date()) && leave.endDate >= startOfDay(new Date())) {
-        await tx.employee.update({
-          where: { id: leave.employeeId },
-          data: { status: 'ON_LEAVE' },
-        });
+        await Employee.updateOne(
+          { _id: leave.employeeId },
+          { status: 'ON_LEAVE' },
+          { session },
+        );
       }
     }
   });
 
-  const employee = leave.employee;
+  const employee = leave.employee as { firstName: string; lastName: string } | null;
   await logActivity({
     userId: reviewer.id,
     actorName: reviewer.email,
     type: 'LEAVE',
-    message: `${status === 'APPROVED' ? 'Approved' : 'Rejected'} ${leave.days} day(s) ${leave.leaveType.toLowerCase()} leave for ${employee.firstName} ${employee.lastName}`,
+    message: `${status === 'APPROVED' ? 'Approved' : 'Rejected'} ${leave.days} day(s) ${leave.leaveType.toLowerCase()} leave for ${employee?.firstName ?? ''} ${employee?.lastName ?? ''}`,
   });
 
   return { id, status };
 }
 
-export async function getBalance(employeeId: number, year = currentYear()) {
+export async function getBalance(employeeId: string, year = currentYear()) {
   await ensureBalances(employeeId, year);
-  const balances = await prisma.leaveBalance.findMany({
-    where: { employeeId, year },
-    orderBy: { leaveType: 'asc' },
-  });
+  const balances = await LeaveBalance.find({ employeeId: oid(employeeId), year }).sort({ leaveType: 1 });
   return balances.map((b) => ({
     year: b.year,
     leaveType: b.leaveType,
@@ -202,32 +187,27 @@ export async function getBalance(employeeId: number, year = currentYear()) {
   }));
 }
 
-async function ensureBalances(employeeId: number, year: number): Promise<void> {
-  const existing = await prisma.leaveBalance.findMany({ where: { employeeId, year } });
+async function ensureBalances(employeeId: string, year: number): Promise<void> {
+  const existing = await LeaveBalance.find({ employeeId: oid(employeeId), year });
   if (existing.length === 4) return;
 
   const quotas = await getLeaveQuotas();
   for (const [type, total] of Object.entries(quotas)) {
-    await prisma.leaveBalance.upsert({
-      where: {
-        employeeId_year_leaveType: { employeeId, year, leaveType: type as LeaveType },
-      },
-      update: {},
-      create: { employeeId, year, leaveType: type as LeaveType, total },
-    });
+    await LeaveBalance.updateOne(
+      { employeeId: oid(employeeId), year, leaveType: type as LeaveType },
+      { $setOnInsert: { total } },
+      { upsert: true },
+    );
   }
 }
 
 export async function onLeaveTodayCount(): Promise<number> {
   const today = startOfDay(new Date());
-  const leaves = await prisma.leave.findMany({
-    where: {
-      status: 'APPROVED',
-      startDate: { lte: today },
-      endDate: { gte: today },
-    },
-    select: { employeeId: true },
-  });
-  const ids = [...new Set(leaves.map((l) => l.employeeId))];
-  return ids.length;
+  const leaves = await Leave.find({
+    status: 'APPROVED',
+    startDate: { $lte: today },
+    endDate: { $gte: today },
+  }).select('employeeId');
+  const ids = new Set(leaves.map((l) => String(l.employeeId)));
+  return ids.size;
 }

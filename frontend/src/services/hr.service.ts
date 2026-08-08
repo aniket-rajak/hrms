@@ -67,7 +67,7 @@ export async function getAllAttendance(params: {
 }
 
 export async function updateAttendance(
-  id: number,
+  id: string,
   input: Partial<{ date: string; checkIn: string | null; checkOut: string | null; status: string; note: string }>,
 ): Promise<AttendanceRecordDto> {
   const res = await api.patch<ApiResponse<AttendanceRecordDto>>(`/attendance/${id}`, input);
@@ -104,11 +104,11 @@ export async function getLeaveBalance(year?: number): Promise<LeaveBalanceDto[]>
 }
 
 export async function reviewLeave(
-  id: number,
+  id: string,
   action: "approve" | "reject",
   note?: string,
-): Promise<{ id: number; status: string }> {
-  const res = await api.patch<ApiResponse<{ id: number; status: string }>>(`/leaves/${id}/${action}`, { note });
+): Promise<{ id: string; status: string }> {
+  const res = await api.patch<ApiResponse<{ id: string; status: string }>>(`/leaves/${id}/${action}`, { note });
   return res.data.data!;
 }
 
@@ -144,15 +144,35 @@ export async function generatePayroll(input: PayrollGenerateInput): Promise<{ cr
   return res.data.data!;
 }
 
-export async function markPaid(id: number): Promise<PayrollRecordDto> {
+export async function markPaid(id: string): Promise<PayrollRecordDto> {
   const res = await api.patch<ApiResponse<PayrollRecordDto>>(`/payroll/records/${id}/paid`);
   return res.data.data!;
 }
 
-export async function deletePayrollRecord(id: number): Promise<void> {
+export async function deletePayrollRecord(id: string): Promise<void> {
   await api.delete(`/payroll/records/${id}`);
 }
 
-export function slipDownloadUrl(id: number): string {
+export function slipDownloadUrl(id: string): string {
   return `${api.defaults.baseURL}/payroll/records/${id}/slip`;
+}
+
+export function slipPrintUrl(id: string): string {
+  return `${api.defaults.baseURL}/payroll/records/${id}/slip?inline=1`;
+}
+
+export function myIdCardDownloadUrl(): string {
+  return `${api.defaults.baseURL}/employees/me/id-card`;
+}
+
+export function myIdCardPrintUrl(): string {
+  return `${api.defaults.baseURL}/employees/me/id-card?inline=1`;
+}
+
+export function employeeIdCardDownloadUrl(id: string): string {
+  return `${api.defaults.baseURL}/employees/${id}/id-card`;
+}
+
+export function employeeIdCardPrintUrl(id: string): string {
+  return `${api.defaults.baseURL}/employees/${id}/id-card?inline=1`;
 }

@@ -1,56 +1,56 @@
 import { DepartmentCreateInput, DepartmentUpdateInput } from '@hrms/shared';
-import { prisma } from '../lib/prisma';
+import { Department, Employee } from '../models';
 import { ApiError } from '../lib/errors';
 import { logActivity } from './activity.service';
+import { oid, toPlain, withTransaction } from '../lib/db';
 
-const departmentInclude = {
-  headEmployee: {
-    select: { id: true, firstName: true, lastName: true, employeeCode: true, profileImageUrl: true },
-  },
-  _count: { select: { employees: true } },
-} as const;
+const headEmployeePopulate = { path: 'headEmployee', select: 'firstName lastName employeeCode profileImageUrl' };
 
 function serializeDepartment(department: unknown) {
-  const d = department as Record<string, unknown> & {
-    createdAt: Date;
-    updatedAt: Date;
-    headEmployee: Record<string, unknown> | null;
-  };
+  const d = toPlain<Record<string, unknown> & { createdAt: Date; updatedAt: Date }>(department);
   return {
     ...d,
-    createdAt: d.createdAt.toISOString(),
-    updatedAt: d.updatedAt.toISOString(),
+    id: d.id as string,
+    createdAt: new Date(d.createdAt).toISOString(),
+    updatedAt: new Date(d.updatedAt).toISOString(),
   };
+}
+
+async function serializeDepartmentWithCount(department: unknown) {
+  const d = serializeDepartment(department);
+  const count = await Employee.countDocuments({ departmentId: oid(d.id) });
+  return { ...d, _count: { employees: count } };
 }
 
 export async function listDepartments() {
-  const departments = await prisma.department.findMany({
-    include: departmentInclude,
-    orderBy: { createdAt: 'asc' },
+  const departments = await Department.find().populate(headEmployeePopulate).sort({ createdAt: 1 });
+  const counts = await Employee.aggregate<{ _id: unknown; count: number }>([
+    { $group: { _id: '$departmentId', count: { $sum: 1 } } },
+  ]);
+  const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
+  return departments.map((d) => {
+    const plain = serializeDepartment(d);
+    return { ...plain, _count: { employees: countMap.get(String(plain.id)) ?? 0 } };
   });
-  return departments.map(serializeDepartment);
 }
 
-export async function getDepartment(id: number) {
-  const department = await prisma.department.findUnique({ where: { id }, include: departmentInclude });
+export async function getDepartment(id: string) {
+  const department = await Department.findById(oid(id)).populate(headEmployeePopulate);
   if (!department) throw ApiError.notFound('Department not found');
-  return serializeDepartment(department);
+  return serializeDepartmentWithCount(department);
 }
 
-export async function createDepartment(data: DepartmentCreateInput, actor: { id: number; email: string }) {
-  const existing = await prisma.department.findFirst({
-    where: { OR: [{ name: data.name.trim() }, { code: data.code.trim().toUpperCase() }] },
+export async function createDepartment(data: DepartmentCreateInput, actor: { id: string; email: string }) {
+  const existing = await Department.findOne({
+    $or: [{ name: data.name.trim() }, { code: data.code.trim().toUpperCase() }],
   });
   if (existing) throw ApiError.conflict('A department with this name or code already exists');
 
-  const department = await prisma.department.create({
-    data: {
-      name: data.name.trim(),
-      code: data.code.trim().toUpperCase(),
-      description: data.description || null,
-      headEmployeeId: data.headEmployeeId ?? null,
-    },
-    include: departmentInclude,
+  const department = await Department.create({
+    name: data.name.trim(),
+    code: data.code.trim().toUpperCase(),
+    description: data.description || null,
+    headEmployeeId: data.headEmployeeId ? oid(data.headEmployeeId) : null,
   });
 
   await logActivity({
@@ -60,55 +60,52 @@ export async function createDepartment(data: DepartmentCreateInput, actor: { id:
     message: `Created department "${department.name}"`,
   });
 
-  return serializeDepartment(department);
+  const populated = await Department.findById(department._id).populate(headEmployeePopulate);
+  return serializeDepartmentWithCount(populated!);
 }
 
-export async function updateDepartment(id: number, data: DepartmentUpdateInput, actor: { id: number; email: string }) {
-  const department = await prisma.department.findUnique({ where: { id } });
+export async function updateDepartment(id: string, data: DepartmentUpdateInput, actor: { id: string; email: string }) {
+  const department = await Department.findById(oid(id));
   if (!department) throw ApiError.notFound('Department not found');
 
   if (data.name) {
-    const duplicate = await prisma.department.findFirst({
-      where: { name: data.name.trim(), id: { not: id } },
-    });
+    const duplicate = await Department.findOne({ name: data.name.trim(), _id: { $ne: oid(id) } });
     if (duplicate) throw ApiError.conflict('Another department already uses this name');
   }
   if (data.code) {
-    const duplicate = await prisma.department.findFirst({
-      where: { code: data.code.trim().toUpperCase(), id: { not: id } },
-    });
+    const duplicate = await Department.findOne({ code: data.code.trim().toUpperCase(), _id: { $ne: oid(id) } });
     if (duplicate) throw ApiError.conflict('Another department already uses this code');
   }
 
-  const updated = await prisma.department.update({
-    where: { id },
-    data: {
+  const updated = await Department.findByIdAndUpdate(
+    oid(id),
+    {
       name: data.name?.trim(),
       code: data.code ? data.code.trim().toUpperCase() : undefined,
       description: data.description === undefined ? undefined : data.description || null,
-      headEmployeeId: data.headEmployeeId === undefined ? undefined : data.headEmployeeId ?? null,
+      headEmployeeId: data.headEmployeeId === undefined ? undefined : data.headEmployeeId ? oid(data.headEmployeeId) : null,
     },
-    include: departmentInclude,
-  });
+    { new: true },
+  ).populate(headEmployeePopulate);
 
   await logActivity({
     userId: actor.id,
     actorName: actor.email,
     type: 'DEPARTMENT',
-    message: `Updated department "${updated.name}"`,
+    message: `Updated department "${updated!.name}"`,
   });
 
-  return serializeDepartment(updated);
+  return serializeDepartmentWithCount(updated!);
 }
 
-export async function deleteDepartment(id: number, actor: { id: number; email: string }) {
-  const department = await prisma.department.findUnique({ where: { id } });
+export async function deleteDepartment(id: string, actor: { id: string; email: string }) {
+  const department = await Department.findById(oid(id));
   if (!department) throw ApiError.notFound('Department not found');
 
-  await prisma.$transaction([
-    prisma.employee.updateMany({ where: { departmentId: id }, data: { departmentId: null } }),
-    prisma.department.delete({ where: { id } }),
-  ]);
+  await withTransaction(async (session) => {
+    await Employee.updateMany({ departmentId: oid(id) }, { departmentId: null }, { session });
+    await Department.deleteOne({ _id: oid(id) }, { session });
+  });
 
   await logActivity({
     userId: actor.id,

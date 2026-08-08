@@ -4,7 +4,7 @@
 
 - Node.js **20.9+** (developed on Node 24)
 - npm 10+
-- MySQL **8.x** (local or cloud — Railway, Aiven, PlanetScale-style compat is fine)
+- MongoDB **6.4+** (local via `mongod`, or MongoDB Atlas)
 - Git
 
 ## 1. Clone & install
@@ -37,7 +37,7 @@ cp backend/.env.example backend/.env
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | Prisma MySQL connection string, e.g. `mysql://root:password@localhost:3306/hrms` |
+| `DATABASE_URL` | MongoDB connection string, e.g. `mongodb://root:password@localhost:27017/hrms` or the MongoDB Atlas URI (`mongodb+srv://…`) |
 | `JWT_SECRET` / `JWT_REFRESH_SECRET` | Long random strings (`openssl rand -hex 32`) |
 | `CLOUDINARY_*` | From your Cloudinary dashboard (needed for uploads) |
 | `SMTP_*` | Your mail provider (Gmail app password, Mailgun, Brevo…). Leave empty in dev — reset links are logged to the console instead |
@@ -54,14 +54,14 @@ cp frontend/.env.example frontend/.env
 | `NEXT_PUBLIC_API_URL` | e.g. `http://localhost:5000/api` |
 | `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name |
 
-## 4. Create the database
+## 4. Database
+
+No schema push needed — the database is created automatically on first connect, and Mongoose syncs collections and indexes from the model definitions in `backend/src/models/` at startup. Just make sure `DATABASE_URL` points at a reachable MongoDB instance:
 
 ```bash
 cd backend
-npx prisma db push
+npm run dev   # connects to DATABASE_URL on boot
 ```
-
-This creates all tables from `backend/prisma/schema.prisma`. A generated DDL snapshot also lives at `database/schema.sql`.
 
 ## 5. Seed demo data
 
@@ -86,12 +86,12 @@ Open http://localhost:3000 and sign in with the seeded admin (`admin@hrms.com` /
 npm run build --workspace backend    # type-check + compile API
 npm run build --workspace frontend   # type-check + build Next.js app
 npm run lint --workspace frontend    # ESLint
-npm run seed --workspace backend     # reset + reseed database
+npm run seed --workspace backend     # seed database with demo data
 ```
 
 ## Troubleshooting
 
 - **`Cannot find module '@hrms/shared'`** → rebuild shared: `npm run build --workspace @hrms/shared`.
-- **`P2002` seed error** → run the seed after a fresh `prisma db push`, or use `npx prisma migrate reset` to wipe and reseed.
+- **Seed reports a duplicate key (`E11000`)** → drop or clear the target collections before reseeding, or run the seed once against a fresh database.
 - **401 on every API call** → the backend `FRONTEND_URL` must match the frontend origin (CORS) and refresh cookie domain rules apply in production (same-site).
 - **Password reset email not arriving** → SMTP vars empty; check the backend console for the `devLink`.

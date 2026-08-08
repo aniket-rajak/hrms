@@ -55,8 +55,8 @@ export interface EmployeeListItem extends Employee {
 }
 
 export interface AttendanceRecordDto {
-  id: number;
-  employeeId: number;
+  id: string;
+  employeeId: string;
   date: string;
   checkIn: string | null;
   checkOut: string | null;
@@ -122,7 +122,7 @@ export interface EmployeeDashboardData {
 }
 
 export interface ActivityDto {
-  id: number;
+  id: string;
   actorName: string;
   type: string;
   message: string;
@@ -130,7 +130,7 @@ export interface ActivityDto {
 }
 
 export interface HolidayDto {
-  id: number;
+  id: string;
   name: string;
   date: string;
 }
@@ -195,7 +195,7 @@ export interface PayrollSummary {
 
 export interface EmployeeDocumentsDto {
   documents: {
-    id: number;
+    id: string;
     title: string;
     type: string;
     fileUrl: string;

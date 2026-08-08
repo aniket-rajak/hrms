@@ -23,11 +23,20 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
+
+  const [role, setRole] = useState<"admin" | "employee" | null>(null);
+
+  const selectRole = (selected: "admin" | "employee") => {
+    setRole(selected);
+    setValue("email", selected === "admin" ? "admin@hrms.com" : "john.smith@acme.com");
+    setValue("password", selected === "admin" ? "Admin@123" : "Welcome@123");
+  };
 
   const onSubmit = async (values: LoginInput) => {
     setError(null);
@@ -57,6 +66,33 @@ export default function LoginPage() {
             <CardDescription>Use your work credentials to sign in.</CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => selectRole("admin")}
+                className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  role === "admin"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-muted/40 hover:bg-muted"
+                }`}
+              >
+                <span className="block text-sm font-semibold">Administrator</span>
+                <span className="block text-xs text-muted-foreground">Full system access</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => selectRole("employee")}
+                className={`cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  role === "employee"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-muted/40 hover:bg-muted"
+                }`}
+              >
+                <span className="block text-sm font-semibold">Employee</span>
+                <span className="block text-xs text-muted-foreground">Own data only</span>
+              </button>
+            </div>
+
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -100,8 +136,7 @@ export default function LoginPage() {
         </Card>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Demo — Admin: <code className="rounded bg-muted px-1">admin@hrms.com / Admin@123</code> · Employee:{" "}
-          <code className="rounded bg-muted px-1">john.smith@acme.com / Welcome@123</code>
+          Demo — select a role above to prefill credentials, or sign in with your work email.
         </p>
       </div>
     </div>

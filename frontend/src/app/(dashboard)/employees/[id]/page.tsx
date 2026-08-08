@@ -29,6 +29,7 @@ import { PageHeader, Panel } from "@/components/shared/page-header";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState, ErrorState } from "@/components/shared/states";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { PasswordReveal } from "@/components/shared/password-reveal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,7 +66,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function DocumentUpload({ employeeId }: { employeeId: number }) {
+function DocumentUpload({ employeeId }: { employeeId: string }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -161,7 +162,7 @@ function monthsSince(dateString: string): string {
   return `${months} months ago`;
 }
 
-function SalarySection({ employeeId, currencySymbol }: { employeeId: number; currencySymbol: string }) {
+function SalarySection({ employeeId, currencySymbol }: { employeeId: string; currencySymbol: string }) {
   const { data: structure, isLoading } = useSalaryStructure(employeeId);
   const upsert = useUpsertSalaryStructure();
   const [open, setOpen] = useState(false);
@@ -266,7 +267,7 @@ function SalarySection({ employeeId, currencySymbol }: { employeeId: number; cur
 
 export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
-  const employeeId = Number(params.id);
+  const employeeId = params.id;
   const { data: employee, isLoading, isError, refetch } = useEmployee(employeeId);
   const qc = useQueryClient();
   const profileImage = useProfileImage();
@@ -377,6 +378,16 @@ export default function EmployeeDetailPage() {
             <InfoRow label="Designation" value={employee.designation} />
             <InfoRow label="Joining date" value={formatDate(employee.joiningDate)} />
             <InfoRow label="Joined" value={monthsSince(employee.joiningDate)} />
+          </dl>
+        </Panel>
+
+        <Panel title="Account credentials" description="Login details for this employee.">
+          <dl className="space-y-1">
+            <InfoRow
+              label="User ID"
+              value={<span className="font-mono">{employee.email}</span>}
+            />
+            <InfoRow label="Password" value={<PasswordReveal value={employee.credentialPassword} />} />
           </dl>
         </Panel>
       </div>

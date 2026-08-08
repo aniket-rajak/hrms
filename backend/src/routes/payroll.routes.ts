@@ -6,10 +6,19 @@ import { authenticate, authorize, AuthRequest, requireEmployee } from '../middle
 import { validate } from '../middleware/validate';
 import * as payrollService from '../services/payroll.service';
 import { parsePagination } from '../utils/pagination';
+import { ApiError } from '../lib/errors';
 
 const router = Router();
 
 router.use(authenticate);
+
+async function assertSlipAccess(req: AuthRequest, record: { employeeId: string }): Promise<void> {
+  const isAdmin = req.user?.role === 'ADMIN';
+  const isOwner = req.employee?.id === record.employeeId;
+  if (!isAdmin && !isOwner) {
+    throw ApiError.forbidden('You can only access your own payslips');
+  }
+}
 
 router.get(
   '/structure/me',
@@ -48,9 +57,14 @@ router.get(
 router.get(
   '/records/:id/slip',
   asyncHandler(async (req: AuthRequest, res) => {
-    const { buffer, filename } = await payrollService.generateSlipPdf(Number(req.params.id));
+    const record = await payrollService.getRecord(req.params.id);
+    await assertSlipAccess(req, { employeeId: record.employeeId });
+    const { buffer, filename } = await payrollService.generateSlipPdf(req.params.id);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `${req.query.inline === '1' ? 'inline' : 'attachment'}; filename="${filename}"`,
+    );
     res.send(buffer);
   }),
 );
@@ -58,7 +72,8 @@ router.get(
 router.get(
   '/records/:id',
   asyncHandler(async (req: AuthRequest, res) => {
-    const record = await payrollService.getRecord(Number(req.params.id));
+    const record = await payrollService.getRecord(req.params.id);
+    await assertSlipAccess(req, record);
     ok(res, record);
   }),
 );
@@ -93,7 +108,7 @@ router.patch(
   '/records/:id/paid',
   authorize('ADMIN'),
   asyncHandler(async (req: AuthRequest, res) => {
-    const record = await payrollService.markPaid(Number(req.params.id), req.user!);
+    const record = await payrollService.markPaid(req.params.id, req.user!);
     ok(res, record, 'Marked as paid');
   }),
 );
@@ -102,7 +117,7 @@ router.delete(
   '/records/:id',
   authorize('ADMIN'),
   asyncHandler(async (req: AuthRequest, res) => {
-    await payrollService.deleteRecord(Number(req.params.id), req.user!);
+    await payrollService.deleteRecord(req.params.id, req.user!);
     ok(res, { deleted: true }, 'Payroll record deleted');
   }),
 );

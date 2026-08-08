@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { PayrollGenerateInput, SalaryStructureInput } from '@hrms/shared';
-import { prisma } from '../lib/prisma';
+import { Employee, PayrollRecord, SalaryStructure } from '../models';
 import { ApiError } from '../lib/errors';
 import { PaginationParams, paginated } from '../utils/pagination';
 import { serializeDecimal, serializeDecimalMap } from '../utils/serializers';
@@ -8,60 +8,57 @@ import { endOfMonth, startOfMonth, monthName, toDateOnly, currentYear } from '..
 import { logActivity } from './activity.service';
 import { getSettingsMap } from './settings.service';
 import { calculateNet, serializeStructure } from './employee.service';
+import { oid, toPlain } from '../lib/db';
+import { ciRegex } from '../utils/query';
 
-const employeePick = {
-  select: {
-    id: true,
-    firstName: true,
-    lastName: true,
-    employeeCode: true,
-    profileImageUrl: true,
-    designation: true,
-    department: { select: { name: true } },
-  },
-} as const;
+const employeeRecordPopulate = {
+  path: 'employee',
+  select: 'firstName lastName employeeCode profileImageUrl designation',
+  populate: { path: 'department', select: 'name' },
+};
 
-function serializeRecord(record: Record<string, unknown>) {
-  const employee = record.employee as Record<string, unknown> | null | undefined;
+function serializeRecord(record: unknown) {
+  const rec = toPlain<Record<string, unknown>>(record);
+  const employee = rec.employee as Record<string, unknown> | null | undefined;
   return {
-    id: record.id as number,
-    employeeId: record.employeeId as number,
-    month: record.month as number,
-    year: record.year as number,
-    structureSnapshot: serializeDecimalMap(record.structureSnapshot),
-    earnings: serializeDecimalMap(record.earnings),
-    deductions: serializeDecimalMap(record.deductions),
-    netSalary: serializeDecimal(record.netSalary),
-    status: record.status as string,
-    paidAt: record.paidAt ? (record.paidAt as Date).toISOString() : null,
-    createdAt: (record.createdAt as Date).toISOString(),
+    id: rec.id as string,
+    employeeId: rec.employeeId as string,
+    month: rec.month as number,
+    year: rec.year as number,
+    structureSnapshot: serializeDecimalMap(rec.structureSnapshot),
+    earnings: serializeDecimalMap(rec.earnings),
+    deductions: serializeDecimalMap(rec.deductions),
+    netSalary: serializeDecimal(rec.netSalary),
+    status: rec.status as string,
+    paidAt: rec.paidAt ? new Date(rec.paidAt as Date).toISOString() : null,
+    createdAt: new Date(rec.createdAt as Date).toISOString(),
     employee: employee
       ? {
-          id: employee.id as number,
+          id: employee.id as string,
           firstName: employee.firstName as string,
           lastName: employee.lastName as string,
           employeeCode: employee.employeeCode as string,
           profileImageUrl: (employee.profileImageUrl as string | null) ?? null,
           designation: employee.designation as string,
-          department: employee.department as Record<string, unknown> | null ?? null,
+          department: (employee.department as Record<string, unknown> | null) ?? null,
         }
       : null,
   };
 }
 
-export async function getStructure(employeeId: number) {
-  const structure = await prisma.salaryStructure.findUnique({ where: { employeeId } });
+export async function getStructure(employeeId: string) {
+  const structure = await SalaryStructure.findOne({ employeeId: oid(employeeId) });
   if (!structure) throw ApiError.notFound('Salary structure not found');
   return serializeStructure(structure);
 }
 
-export async function upsertStructure(employeeId: number, data: SalaryStructureInput, actor: { id: number; email: string }) {
+export async function upsertStructure(employeeId: string, data: SalaryStructureInput, actor: { id: string; email: string }) {
   const netSalary = calculateNet(data);
-  const structure = await prisma.salaryStructure.upsert({
-    where: { employeeId },
-    update: { ...data, netSalary },
-    create: { employeeId, ...data, netSalary },
-  });
+  const structure = await SalaryStructure.findOneAndUpdate(
+    { employeeId: oid(employeeId) },
+    { $set: { ...data, netSalary } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
   await logActivity({
     userId: actor.id,
     actorName: actor.email,
@@ -71,15 +68,10 @@ export async function upsertStructure(employeeId: number, data: SalaryStructureI
   return serializeStructure(structure);
 }
 
-export async function generateMonthly(data: PayrollGenerateInput, actor: { id: number; email: string }) {
-  const employees = await prisma.employee.findMany({
-    where: { status: { in: ['ACTIVE', 'ON_LEAVE'] } },
-    include: { salaryStructure: true },
-  });
+export async function generateMonthly(data: PayrollGenerateInput, actor: { id: string; email: string }) {
+  const employees = await Employee.find({ status: { $in: ['ACTIVE', 'ON_LEAVE'] } }).populate('salaryStructure');
 
-  const existing = await prisma.payrollRecord.count({
-    where: { month: data.month, year: data.year },
-  });
+  const existing = await PayrollRecord.countDocuments({ month: data.month, year: data.year });
   if (existing > 0) {
     throw ApiError.conflict(
       `Payroll for ${monthName(data.year, data.month)} ${data.year} already exists. Delete existing records first to regenerate.`,
@@ -89,28 +81,27 @@ export async function generateMonthly(data: PayrollGenerateInput, actor: { id: n
   let created = 0;
   for (const employee of employees) {
     if (!employee.salaryStructure) continue;
+    const structure = employee.salaryStructure;
     const earnings = {
-      basic: serializeDecimal(employee.salaryStructure.basic),
-      housing: serializeDecimal(employee.salaryStructure.housing),
-      transport: serializeDecimal(employee.salaryStructure.transport),
-      medical: serializeDecimal(employee.salaryStructure.medical),
-      otherAllowances: serializeDecimal(employee.salaryStructure.otherAllowances),
+      basic: serializeDecimal(structure.basic),
+      housing: serializeDecimal(structure.housing),
+      transport: serializeDecimal(structure.transport),
+      medical: serializeDecimal(structure.medical),
+      otherAllowances: serializeDecimal(structure.otherAllowances),
     };
-    const deductions = { deductions: serializeDecimal(employee.salaryStructure.deductions) };
+    const deductions = { deductions: serializeDecimal(structure.deductions) };
     const netSalary =
       earnings.basic + earnings.housing + earnings.transport + earnings.medical + earnings.otherAllowances -
       deductions.deductions;
 
-    await prisma.payrollRecord.create({
-      data: {
-        employeeId: employee.id,
-        month: data.month,
-        year: data.year,
-        structureSnapshot: earnings,
-        earnings,
-        deductions,
-        netSalary,
-      },
+    await PayrollRecord.create({
+      employeeId: employee._id,
+      month: data.month,
+      year: data.year,
+      structureSnapshot: earnings,
+      earnings,
+      deductions,
+      netSalary,
     });
     created++;
   }
@@ -130,71 +121,68 @@ export interface PayrollListParams extends PaginationParams {
   year?: number;
   status?: string;
   search?: string;
-  employeeId?: number;
+  employeeId?: string;
 }
 
 export async function listRecords(params: PayrollListParams) {
   const where: Record<string, unknown> = {};
-  if (params.employeeId) where.employeeId = params.employeeId;
+  if (params.employeeId) where.employeeId = oid(params.employeeId as string);
   if (params.month) where.month = params.month;
   if (params.year) where.year = params.year;
   if (params.status) where.status = params.status;
   if (params.search) {
     const term = params.search.trim();
-    where.employee = {
-      OR: [
-        { firstName: { contains: term } },
-        { lastName: { contains: term } },
-        { employeeCode: { contains: term } },
+    const matches = await Employee.find({
+      $or: [
+        { firstName: ciRegex(term) },
+        { lastName: ciRegex(term) },
+        { employeeCode: ciRegex(term) },
       ],
-    };
+    }).select('_id');
+    where.employeeId = { $in: matches.map((m) => m._id) };
   }
 
   const [records, total] = await Promise.all([
-    prisma.payrollRecord.findMany({
-      where,
-      include: { employee: employeePick },
-      orderBy: [{ year: 'desc' }, { month: 'desc' }],
-      skip: (params.page - 1) * params.pageSize,
-      take: params.pageSize,
-    }),
-    prisma.payrollRecord.count({ where }),
+    PayrollRecord.find(where)
+      .populate(employeeRecordPopulate)
+      .sort({ year: -1, month: -1 })
+      .skip((params.page - 1) * params.pageSize)
+      .limit(params.pageSize),
+    PayrollRecord.countDocuments(where),
   ]);
 
-  return paginated(records.map((r) => serializeRecord(r as never)), total, params);
+  return paginated(records.map((r) => serializeRecord(r)), total, params);
 }
 
-export async function getRecord(id: number) {
-  const record = await prisma.payrollRecord.findUnique({
-    where: { id },
-    include: { employee: { include: { department: true } } },
-  });
+export async function getRecord(id: string) {
+  const record = await PayrollRecord.findById(oid(id)).populate(employeeRecordPopulate);
   if (!record) throw ApiError.notFound('Payroll record not found');
-  return serializeRecord(record as never);
+  return serializeRecord(record);
 }
 
-export async function markPaid(id: number, actor: { id: number; email: string }) {
-  const record = await prisma.payrollRecord.findUnique({ where: { id } });
+export async function markPaid(id: string, actor: { id: string; email: string }) {
+  const record = await PayrollRecord.findById(oid(id));
   if (!record) throw ApiError.notFound('Payroll record not found');
 
-  const updated = await prisma.payrollRecord.update({
-    where: { id },
-    data: { status: 'PAID', paidAt: new Date() },
-  });
+  const updated = await PayrollRecord.findByIdAndUpdate(
+    oid(id),
+    { status: 'PAID', paidAt: new Date() },
+    { new: true },
+  );
   await logActivity({
     userId: actor.id,
     actorName: actor.email,
     type: 'PAYROLL',
     message: `Marked ${monthName(record.year, record.month)} ${record.year} salary as paid`,
   });
-  return serializeRecord(updated as never);
+  return serializeRecord(updated);
 }
 
-export async function deleteRecord(id: number, actor: { id: number; email: string }) {
-  const record = await prisma.payrollRecord.findUnique({ where: { id } });
+export async function deleteRecord(id: string, actor: { id: string; email: string }) {
+  const record = await PayrollRecord.findById(oid(id));
   if (!record) throw ApiError.notFound('Payroll record not found');
 
-  await prisma.payrollRecord.delete({ where: { id } });
+  await PayrollRecord.deleteOne({ _id: oid(id) });
   await logActivity({
     userId: actor.id,
     actorName: actor.email,
@@ -208,7 +196,7 @@ const MUTED = '#6b7280';
 
 function buildSlipPdf(
   record: {
-    id: number;
+    id: string;
     month: number;
     year: number;
     earnings: Record<string, number>;
@@ -353,11 +341,8 @@ function buildSlipPdf(
   });
 }
 
-export async function generateSlipPdf(recordId: number): Promise<{ buffer: Buffer; filename: string }> {
-  const record = await prisma.payrollRecord.findUnique({
-    where: { id: recordId },
-    include: { employee: true },
-  });
+export async function generateSlipPdf(recordId: string): Promise<{ buffer: Buffer; filename: string }> {
+  const record = await PayrollRecord.findById(oid(recordId)).populate('employee');
   if (!record) throw ApiError.notFound('Payroll record not found');
 
   const settings = await getSettingsMap();
@@ -367,6 +352,13 @@ export async function generateSlipPdf(recordId: number): Promise<{ buffer: Buffe
     email: (settings.companyEmail as string | null) ?? null,
     phone: (settings.companyPhone as string | null) ?? null,
     logo: (settings.companyLogo as string | null) ?? null,
+  };
+
+  const employee = record.employee as unknown as {
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
+    designation: string;
   };
 
   const buffer = await buildSlipPdf(
@@ -380,14 +372,14 @@ export async function generateSlipPdf(recordId: number): Promise<{ buffer: Buffe
       status: record.status,
     },
     {
-      employeeCode: record.employee.employeeCode,
-      firstName: record.employee.firstName,
-      lastName: record.employee.lastName,
-      designation: record.employee.designation,
+      employeeCode: employee.employeeCode,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      designation: employee.designation,
     },
     company,
   );
 
-  const filename = `salary-slip-${record.employee.employeeCode}-${record.year}-${String(record.month).padStart(2, '0')}.pdf`;
+  const filename = `salary-slip-${employee.employeeCode}-${record.year}-${String(record.month).padStart(2, '0')}.pdf`;
   return { buffer, filename };
 }

@@ -28,7 +28,7 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
         <footer className="border-t px-6 py-3 text-center text-xs text-muted-foreground">
-          HRMS © {new Date().getFullYear()} — Built with Next.js, Node.js, TypeScript and MySQL
+          HRMS © {new Date().getFullYear()} — Built with Next.js, Node.js, TypeScript and MongoDB
         </footer>
       </div>
     </div>

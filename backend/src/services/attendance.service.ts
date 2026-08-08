@@ -4,7 +4,7 @@ import {
   HALF_DAY_HOURS,
   MIN_WORKING_HOURS_PER_DAY,
 } from '@hrms/shared';
-import { prisma } from '../lib/prisma';
+import { Attendance, Employee } from '../models';
 import { ApiError } from '../lib/errors';
 import { PaginationParams, paginated } from '../utils/pagination';
 import {
@@ -18,20 +18,23 @@ import {
   endOfDay,
 } from '../utils/dates';
 import { logActivity } from './activity.service';
+import { oid, toPlain } from '../lib/db';
+import { ciRegex } from '../utils/query';
 
-function serializeAttendance(record: Record<string, unknown>): AttendanceRecordDto {
-  const employee = record.employee as
-    | { id: number; firstName: string; lastName: string; employeeCode: string; profileImageUrl: string | null }
+function serializeAttendance(record: unknown): AttendanceRecordDto {
+  const rec = toPlain<Record<string, unknown>>(record);
+  const employee = rec.employee as
+    | { id: string; firstName: string; lastName: string; employeeCode: string; profileImageUrl: string | null }
     | undefined;
   return {
-    id: record.id as number,
-    employeeId: record.employeeId as number,
-    date: (record.date as Date).toISOString(),
-    checkIn: record.checkIn ? (record.checkIn as Date).toISOString() : null,
-    checkOut: record.checkOut ? (record.checkOut as Date).toISOString() : null,
-    status: record.status as AttendanceRecordDto['status'],
-    workingHours: record.workingHours as number | null,
-    note: (record.note as string | null) ?? null,
+    id: rec.id as string,
+    employeeId: rec.employeeId as string,
+    date: new Date(rec.date as Date).toISOString(),
+    checkIn: rec.checkIn ? new Date(rec.checkIn as Date).toISOString() : null,
+    checkOut: rec.checkOut ? new Date(rec.checkOut as Date).toISOString() : null,
+    status: rec.status as AttendanceRecordDto['status'],
+    workingHours: rec.workingHours as number | null,
+    note: (rec.note as string | null) ?? null,
     employee: employee
       ? {
           id: employee.id,
@@ -44,35 +47,25 @@ function serializeAttendance(record: Record<string, unknown>): AttendanceRecordD
   };
 }
 
-export async function checkIn(employeeId: number, note: string | null | undefined, actorName: string) {
+export async function checkIn(employeeId: string, note: string | null | undefined, actorName: string) {
   const today = startOfDay(new Date());
-  const existing = await prisma.attendance.findUnique({
-    where: { employeeId_date: { employeeId, date: today } },
-  });
+  const existing = await Attendance.findOne({ employeeId: oid(employeeId), date: today });
   if (existing?.checkIn) throw ApiError.conflict('You have already checked in today');
   if (existing?.checkOut) throw ApiError.conflict('Attendance already closed for today');
 
-  const record = await prisma.attendance.upsert({
-    where: { employeeId_date: { employeeId, date: today } },
-    update: { checkIn: new Date(), status: 'PRESENT', note: note ?? null },
-    create: {
-      employeeId,
-      date: today,
-      checkIn: new Date(),
-      status: 'PRESENT',
-      note: note ?? null,
-    },
-  });
+  const record = await Attendance.findOneAndUpdate(
+    { employeeId: oid(employeeId), date: today },
+    { $set: { checkIn: new Date(), status: 'PRESENT', note: note ?? null } },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
 
   await logActivity({ actorName, type: 'ATTENDANCE', message: 'Checked in' });
-  return serializeAttendance(record as never);
+  return serializeAttendance(record);
 }
 
-export async function checkOut(employeeId: number, actorName: string) {
+export async function checkOut(employeeId: string, actorName: string) {
   const today = startOfDay(new Date());
-  const record = await prisma.attendance.findUnique({
-    where: { employeeId_date: { employeeId, date: today } },
-  });
+  const record = await Attendance.findOne({ employeeId: oid(employeeId), date: today });
   if (!record || !record.checkIn) throw ApiError.badRequest('You must check in before checking out');
   if (record.checkOut) throw ApiError.conflict('You have already checked out today');
 
@@ -80,53 +73,50 @@ export async function checkOut(employeeId: number, actorName: string) {
   const workingHours = workingHoursBetween(record.checkIn, checkOutTime);
   const status = workingHours >= MIN_WORKING_HOURS_PER_DAY ? 'PRESENT' : 'HALF_DAY';
 
-  const updated = await prisma.attendance.update({
-    where: { id: record.id },
-    data: { checkOut: checkOutTime, workingHours, status },
-  });
+  const updated = await Attendance.findByIdAndUpdate(
+    record._id,
+    { checkOut: checkOutTime, workingHours, status },
+    { new: true },
+  );
 
   await logActivity({
     actorName,
     type: 'ATTENDANCE',
     message: `Checked out after ${workingHours} hours`,
   });
-  return serializeAttendance(updated as never);
+  return serializeAttendance(updated);
 }
 
-export async function getToday(employeeId: number): Promise<AttendanceRecordDto | null> {
-  const record = await prisma.attendance.findUnique({
-    where: { employeeId_date: { employeeId, date: startOfDay(new Date()) } },
-  });
-  return record ? serializeAttendance(record as never) : null;
+export async function getToday(employeeId: string): Promise<AttendanceRecordDto | null> {
+  const record = await Attendance.findOne({ employeeId: oid(employeeId), date: startOfDay(new Date()) });
+  return record ? serializeAttendance(record) : null;
 }
 
-export async function history(employeeId: number, params: PaginationParams & { month?: number; year?: number }) {
-  const where: Record<string, unknown> = { employeeId };
+export async function history(employeeId: string, params: PaginationParams & { month?: number; year?: number }) {
+  const where: Record<string, unknown> = { employeeId: oid(employeeId) };
   if (params.month && params.year) {
     where.date = {
-      gte: startOfMonth(new Date(params.year, params.month - 1, 1)),
-      lte: endOfMonth(new Date(params.year, params.month - 1, 1)),
+      $gte: startOfMonth(new Date(params.year, params.month - 1, 1)),
+      $lte: endOfMonth(new Date(params.year, params.month - 1, 1)),
     };
   }
   const [records, total] = await Promise.all([
-    prisma.attendance.findMany({
-      where,
-      orderBy: { date: 'desc' },
-      skip: (params.page - 1) * params.pageSize,
-      take: params.pageSize,
-    }),
-    prisma.attendance.count({ where }),
+    Attendance.find(where)
+      .sort({ date: -1 })
+      .skip((params.page - 1) * params.pageSize)
+      .limit(params.pageSize),
+    Attendance.countDocuments(where),
   ]);
-  return paginated(records.map((r) => serializeAttendance(r as never)), total, params);
+  return paginated(records.map((r) => serializeAttendance(r)), total, params);
 }
 
-export async function monthly(employeeId: number, month: number, year: number) {
+export async function monthly(employeeId: string, month: number, year: number) {
   const start = startOfMonth(new Date(year, month - 1, 1));
   const end = endOfMonth(new Date(year, month - 1, 1));
-  const records = await prisma.attendance.findMany({
-    where: { employeeId, date: { gte: start, lte: end } },
-    orderBy: { date: 'asc' },
-  });
+  const records = await Attendance.find({
+    employeeId: oid(employeeId),
+    date: { $gte: start, $lte: end },
+  }).sort({ date: 1 });
 
   const summary: AttendanceSummary = {
     present: records.filter((r) => r.status === 'PRESENT').length,
@@ -140,7 +130,7 @@ export async function monthly(employeeId: number, month: number, year: number) {
   return {
     month,
     year,
-    records: records.map((r) => serializeAttendance(r as never)),
+    records: records.map((r) => serializeAttendance(r)),
     summary,
   };
 }
@@ -156,61 +146,53 @@ export async function listForAdmin(params: AdminListParams) {
   const where: Record<string, unknown> = {};
   if (params.month && params.year) {
     where.date = {
-      gte: startOfMonth(new Date(params.year, params.month - 1, 1)),
-      lte: endOfMonth(new Date(params.year, params.month - 1, 1)),
+      $gte: startOfMonth(new Date(params.year, params.month - 1, 1)),
+      $lte: endOfMonth(new Date(params.year, params.month - 1, 1)),
     };
   } else if (params.year) {
     where.date = {
-      gte: new Date(params.year, 0, 1),
-      lte: new Date(params.year, 11, 31, 23, 59, 59),
+      $gte: new Date(params.year, 0, 1),
+      $lte: new Date(params.year, 11, 31, 23, 59, 59),
     };
   }
   if (params.status) where.status = params.status;
   if (params.search) {
     const term = params.search.trim();
-    where.employee = {
-      OR: [
-        { firstName: { contains: term } },
-        { lastName: { contains: term } },
-        { employeeCode: { contains: term } },
-        { email: { contains: term } },
+    const matches = await Employee.find({
+      $or: [
+        { firstName: ciRegex(term) },
+        { lastName: ciRegex(term) },
+        { employeeCode: ciRegex(term) },
+        { email: ciRegex(term) },
       ],
-    };
+    }).select('_id');
+    where.employeeId = { $in: matches.map((m) => m._id) };
   }
 
   const [records, total] = await Promise.all([
-    prisma.attendance.findMany({
-      where,
-      include: {
-        employee: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            employeeCode: true,
-            profileImageUrl: true,
-            department: { select: { name: true } },
-          },
-        },
-      },
-      orderBy: { date: 'desc' },
-      skip: (params.page - 1) * params.pageSize,
-      take: params.pageSize,
-    }),
-    prisma.attendance.count({ where }),
+    Attendance.find(where)
+      .populate({
+        path: 'employee',
+        select: 'firstName lastName employeeCode profileImageUrl',
+        populate: { path: 'department', select: 'name' },
+      })
+      .sort({ date: -1 })
+      .skip((params.page - 1) * params.pageSize)
+      .limit(params.pageSize),
+    Attendance.countDocuments(where),
   ]);
 
-  return paginated(records.map((r) => serializeAttendance(r as never)), total, params);
+  return paginated(records.map((r) => serializeAttendance(r)), total, params);
 }
 
-export async function updateAttendance(id: number, data: {
+export async function updateAttendance(id: string, data: {
   date?: string;
   checkIn?: string | null;
   checkOut?: string | null;
   status?: string;
   note?: string | null;
-}, actor: { id: number; email: string }) {
-  const record = await prisma.attendance.findUnique({ where: { id }, include: { employee: true } });
+}, actor: { id: string; email: string }) {
+  const record = await Attendance.findById(oid(id)).populate('employee');
   if (!record) throw ApiError.notFound('Attendance record not found');
 
   const updateData: Record<string, unknown> = {
@@ -230,28 +212,30 @@ export async function updateAttendance(id: number, data: {
   }
 
   if (updateData.date && !isSameDay(updateData.date as Date, record.date)) {
-    const conflict = await prisma.attendance.findUnique({
-      where: { employeeId_date: { employeeId: record.employeeId, date: updateData.date as Date } },
+    const conflict = await Attendance.findOne({
+      employeeId: record.employeeId,
+      date: updateData.date as Date,
     });
     if (conflict) throw ApiError.conflict('Employee already has attendance on that date');
   }
 
-  const updated = await prisma.attendance.update({ where: { id }, data: updateData });
+  const updated = await Attendance.findByIdAndUpdate(oid(id), updateData, { new: true });
+  const employee = record.employee as { firstName: string; lastName: string } | null;
   await logActivity({
     userId: actor.id,
     actorName: actor.email,
     type: 'ATTENDANCE',
-    message: `Corrected attendance for ${record.employee.firstName} ${record.employee.lastName} on ${toDateOnly(record.date)}`,
+    message: `Corrected attendance for ${employee?.firstName ?? ''} ${employee?.lastName ?? ''} on ${toDateOnly(record.date)}`,
   });
-  return serializeAttendance(updated as never);
+  return serializeAttendance(updated);
 }
 
 export async function todaySummary() {
   const today = startOfDay(new Date());
   const [present, onLeave, total] = await Promise.all([
-    prisma.attendance.count({ where: { date: today, status: { in: ['PRESENT', 'HALF_DAY'] } } }),
-    prisma.employee.count({ where: { status: 'ON_LEAVE' } }),
-    prisma.employee.count({ where: { status: 'ACTIVE' } }),
+    Attendance.countDocuments({ date: today, status: { $in: ['PRESENT', 'HALF_DAY'] } }),
+    Employee.countDocuments({ status: 'ON_LEAVE' }),
+    Employee.countDocuments({ status: 'ACTIVE' }),
   ]);
   return { present, onLeave, total };
 }
@@ -263,12 +247,11 @@ export async function monthlyAttendanceTrend(months = 6) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const start = startOfMonth(date);
     const end = endOfMonth(date);
-    const counts = await prisma.attendance.groupBy({
-      by: ['status'],
-      where: { date: { gte: start, lte: end } },
-      _count: true,
-    });
-    const byStatus = Object.fromEntries(counts.map((c) => [c.status, c._count]));
+    const counts = await Attendance.aggregate<{ _id: string; count: number }>([
+      { $match: { date: { $gte: start, $lte: end } } },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]);
+    const byStatus = Object.fromEntries(counts.map((c) => [c._id, c.count]));
     points.push({
       month: monthName(date.getFullYear(), date.getMonth() + 1),
       present: byStatus.PRESENT ?? 0,

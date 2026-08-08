@@ -12,6 +12,7 @@ import { created, ok } from '../lib/respond';
 import { authenticate, authorize, AuthRequest, requireEmployee } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import * as employeeService from '../services/employee.service';
+import { generateIdCardPdf } from '../services/id-card.service';
 import { getStructure } from '../services/payroll.service';
 import { parsePagination } from '../utils/pagination';
 
@@ -31,7 +32,7 @@ router.get(
     const result = await employeeService.listEmployees({
       ...params,
       search: typeof req.query.search === 'string' ? req.query.search : undefined,
-      departmentId: req.query.departmentId ? Number(req.query.departmentId) : undefined,
+      departmentId: typeof req.query.departmentId === 'string' ? req.query.departmentId : undefined,
       status: typeof req.query.status === 'string' ? req.query.status : undefined,
     });
     ok(res, result);
@@ -58,11 +59,39 @@ router.get(
 );
 
 router.get(
+  '/me/id-card',
+  requireEmployee,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { buffer, filename } = await generateIdCardPdf(req.employee!.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `${req.query.inline === '1' ? 'inline' : 'attachment'}; filename="${filename}"`,
+    );
+    res.send(buffer);
+  }),
+);
+
+router.get(
   '/:id',
   authorize('ADMIN'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const employee = await employeeService.getEmployee(Number(req.params.id));
+    const employee = await employeeService.getEmployee(req.params.id);
     ok(res, employee);
+  }),
+);
+
+router.get(
+  '/:id/id-card',
+  authorize('ADMIN'),
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { buffer, filename } = await generateIdCardPdf(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `${req.query.inline === '1' ? 'inline' : 'attachment'}; filename="${filename}"`,
+    );
+    res.send(buffer);
   }),
 );
 
@@ -71,7 +100,7 @@ router.patch(
   authorize('ADMIN'),
   validate(employeeUpdateSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const employee = await employeeService.updateEmployee(Number(req.params.id), req.body, req.user!);
+    const employee = await employeeService.updateEmployee(req.params.id, req.body, req.user!);
     ok(res, employee, 'Employee updated successfully');
   }),
 );
@@ -80,7 +109,7 @@ router.delete(
   '/:id',
   authorize('ADMIN'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    await employeeService.deleteEmployee(Number(req.params.id), req.user!);
+    await employeeService.deleteEmployee(req.params.id, req.user!);
     ok(res, { deleted: true }, 'Employee deleted');
   }),
 );
@@ -91,7 +120,7 @@ router.patch(
   validate(profileImageSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const employee = await employeeService.updateProfileImage(
-      Number(req.params.id),
+      req.params.id,
       req.body.profileImageUrl,
       req.user!,
     );
@@ -103,7 +132,7 @@ router.get(
   '/:id/salary-structure',
   authorize('ADMIN'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const structure = await getStructure(Number(req.params.id));
+    const structure = await getStructure(req.params.id);
     ok(res, structure);
   }),
 );
@@ -113,7 +142,7 @@ router.put(
   authorize('ADMIN'),
   validate(salaryStructureSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const structure = await employeeService.upsertSalaryStructure(Number(req.params.id), req.body, req.user!);
+    const structure = await employeeService.upsertSalaryStructure(req.params.id, req.body, req.user!);
     ok(res, structure, 'Salary structure updated');
   }),
 );
@@ -123,7 +152,7 @@ router.post(
   authorize('ADMIN'),
   validate(employeeDocumentSchema),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const doc = await employeeService.addDocument(Number(req.params.id), req.body, req.user!);
+    const doc = await employeeService.addDocument(req.params.id, req.body, req.user!);
     created(res, doc, 'Document uploaded');
   }),
 );
@@ -132,7 +161,7 @@ router.delete(
   '/documents/:docId',
   authorize('ADMIN'),
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    await employeeService.removeDocument(Number(req.params.docId), req.user!);
+    await employeeService.removeDocument(req.params.docId, req.user!);
     ok(res, { deleted: true }, 'Document removed');
   }),
 );

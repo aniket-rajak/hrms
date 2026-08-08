@@ -3,13 +3,13 @@ import jwt, { SignOptions } from 'jsonwebtoken';
 import { env } from '../config/env';
 
 export interface AccessTokenPayload {
-  sub: number;
+  sub: string;
   email: string;
   role: string;
   type: 'access';
 }
 
-export function signAccessToken(userId: number, email: string, role: string): string {
+export function signAccessToken(userId: string, email: string, role: string): string {
   const payload: AccessTokenPayload = { sub: userId, email, role, type: 'access' };
   return jwt.sign(payload, env.jwtSecret, {
     expiresIn: env.accessTokenTtl,

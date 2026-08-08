@@ -120,7 +120,7 @@ function DepartmentDialog({
             <Label>Department head</Label>
             <Select
               value={watch("headEmployeeId") ? String(watch("headEmployeeId")) : "none"}
-              onValueChange={(v) => setValue("headEmployeeId", v === "none" ? undefined : Number(v))}
+              onValueChange={(v) => setValue("headEmployeeId", v === "none" ? undefined : v)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select an employee" />
@@ -155,7 +155,7 @@ export default function DepartmentsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Department | null>(null);
 
-  const handleDelete = async (id: number, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     try {
       await deleteDepartment.mutateAsync(id);
       toast.success(`Department "${name}" deleted`);

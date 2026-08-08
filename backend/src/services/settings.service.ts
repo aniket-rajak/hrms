@@ -1,10 +1,12 @@
-import { SettingsUpdateInput, ProfileUpdateInput, DEFAULT_SETTINGS } from '@hrms/shared';
-import { prisma } from '../lib/prisma';
+import { SettingsUpdateInput, ProfileUpdateInput } from '@hrms/shared';
+import { DEFAULT_SETTINGS } from '@hrms/shared';
+import { Employee, Holiday, SystemSetting, User } from '../models';
 import { ApiError } from '../lib/errors';
 import { logActivity } from './activity.service';
+import { oid, toPlain, withTransaction } from '../lib/db';
 
 export async function getSettingsMap(): Promise<Record<string, string>> {
-  const settings = await prisma.systemSetting.findMany();
+  const settings = await SystemSetting.find();
   const map: Record<string, string> = { ...DEFAULT_SETTINGS };
   for (const setting of settings) {
     map[setting.key] = setting.value ?? '';
@@ -15,10 +17,7 @@ export async function getSettingsMap(): Promise<Record<string, string>> {
 export async function getPublicSettings() {
   const [map, holidays] = await Promise.all([
     getSettingsMap(),
-    prisma.holiday.findMany({
-      orderBy: { date: 'asc' },
-      take: 100,
-    }),
+    Holiday.find({}).sort({ date: 1 }).limit(100),
   ]);
 
   return {
@@ -36,19 +35,19 @@ export async function getPublicSettings() {
   };
 }
 
-export async function updateSettings(data: SettingsUpdateInput, actor: { id: number; email: string }) {
+export async function updateSettings(data: SettingsUpdateInput, actor: { id: string; email: string }) {
   const entries = Object.entries(data).filter(([, v]) => v !== undefined) as [string, string | number][];
   if (entries.length === 0) throw ApiError.badRequest('No settings provided');
 
-  await prisma.$transaction(
-    entries.map(([key, value]) =>
-      prisma.systemSetting.upsert({
-        where: { key },
-        update: { value: String(value) },
-        create: { key, value: String(value) },
-      }),
-    ),
-  );
+  await withTransaction(async (session) => {
+    for (const [key, value] of entries) {
+      await SystemSetting.updateOne(
+        { key },
+        { $set: { value: String(value) } },
+        { upsert: true, session },
+      );
+    }
+  });
 
   await logActivity({
     userId: actor.id,
@@ -60,12 +59,12 @@ export async function updateSettings(data: SettingsUpdateInput, actor: { id: num
   return getPublicSettings();
 }
 
-export async function updateCompanyLogo(url: string, actor: { id: number; email: string }) {
-  await prisma.systemSetting.upsert({
-    where: { key: 'companyLogo' },
-    update: { value: url },
-    create: { key: 'companyLogo', value: url },
-  });
+export async function updateCompanyLogo(url: string, actor: { id: string; email: string }) {
+  await SystemSetting.updateOne(
+    { key: 'companyLogo' },
+    { $set: { value: url } },
+    { upsert: true },
+  );
   await logActivity({
     userId: actor.id,
     actorName: actor.email,
@@ -75,14 +74,16 @@ export async function updateCompanyLogo(url: string, actor: { id: number; email:
   return getPublicSettings();
 }
 
-export async function updateProfile(userId: number, data: ProfileUpdateInput) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, include: { employee: true } });
+export async function updateProfile(userId: string, data: ProfileUpdateInput) {
+  const user = await User.findById(oid(userId));
   if (!user) throw ApiError.notFound('User not found');
-  if (!user.employee) throw ApiError.badRequest('Profile update is only available for employees');
 
-  const employee = await prisma.employee.update({
-    where: { id: user.employee.id },
-    data: {
+  const employee = await Employee.findOne({ userId: user._id });
+  if (!employee) throw ApiError.badRequest('Profile update is only available for employees');
+
+  const updated = await Employee.findByIdAndUpdate(
+    employee._id,
+    {
       firstName: data.firstName,
       lastName: data.lastName,
       phone: data.phone === undefined ? undefined : data.phone || null,
@@ -95,27 +96,28 @@ export async function updateProfile(userId: number, data: ProfileUpdateInput) {
       country: data.country === undefined ? undefined : data.country || null,
       profileImageUrl: data.profileImageUrl === undefined ? undefined : data.profileImageUrl ?? null,
     },
-    include: { department: true, salaryStructure: true },
-  });
+    { new: true },
+  ).populate([{ path: 'department' }, { path: 'salaryStructure' }]);
 
+  const plain = toPlain<Record<string, unknown>>(updated);
   return {
-    ...employee,
-    dateOfBirth: employee.dateOfBirth ? employee.dateOfBirth.toISOString() : null,
-    joiningDate: employee.joiningDate.toISOString(),
-    createdAt: employee.createdAt.toISOString(),
-    updatedAt: employee.updatedAt.toISOString(),
+    ...plain,
+    dateOfBirth: updated!.dateOfBirth ? updated!.dateOfBirth.toISOString() : null,
+    joiningDate: updated!.joiningDate.toISOString(),
+    createdAt: updated!.createdAt.toISOString(),
+    updatedAt: updated!.updatedAt.toISOString(),
   };
 }
 
 export async function listHolidays() {
-  const holidays = await prisma.holiday.findMany({ orderBy: { date: 'asc' } });
+  const holidays = await Holiday.find().sort({ date: 1 });
   return holidays.map((h) => ({ id: h.id, name: h.name, date: h.date.toISOString() }));
 }
 
-export async function createHoliday(name: string, date: string, actor: { id: number; email: string }) {
+export async function createHoliday(name: string, date: string, actor: { id: string; email: string }) {
   const holidayDate = new Date(date);
   holidayDate.setHours(0, 0, 0, 0);
-  const holiday = await prisma.holiday.create({ data: { name: name.trim(), date: holidayDate } });
+  const holiday = await Holiday.create({ name: name.trim(), date: holidayDate });
   await logActivity({
     userId: actor.id,
     actorName: actor.email,
@@ -125,10 +127,10 @@ export async function createHoliday(name: string, date: string, actor: { id: num
   return { id: holiday.id, name: holiday.name, date: holiday.date.toISOString() };
 }
 
-export async function deleteHoliday(id: number, actor: { id: number; email: string }) {
-  const holiday = await prisma.holiday.findUnique({ where: { id } });
+export async function deleteHoliday(id: string, actor: { id: string; email: string }) {
+  const holiday = await Holiday.findById(oid(id));
   if (!holiday) throw ApiError.notFound('Holiday not found');
-  await prisma.holiday.delete({ where: { id } });
+  await Holiday.deleteOne({ _id: holiday._id });
   await logActivity({
     userId: actor.id,
     actorName: actor.email,

@@ -23,7 +23,7 @@ export {
 };
 
 export interface User {
-  id: number;
+  id: string;
   email: string;
   role: Role;
   status: UserStatus;
@@ -33,8 +33,8 @@ export interface User {
 }
 
 export interface Employee {
-  id: number;
-  userId: number;
+  id: string;
+  userId: string;
   employeeCode: string;
   firstName: string;
   lastName: string;
@@ -51,21 +51,22 @@ export interface Employee {
   designation: string;
   joiningDate: string;
   status: EmployeeStatus;
-  departmentId: number | null;
+  departmentId: string | null;
   createdAt: string;
   updatedAt: string;
   department?: Department | null;
   salaryStructure?: SalaryStructure | null;
   documents?: EmployeeDocument[];
   user?: Pick<User, "id" | "email" | "role" | "status"> | null;
+  credentialPassword?: string | null;
 }
 
 export interface Department {
-  id: number;
+  id: string;
   name: string;
   code: string;
   description: string | null;
-  headEmployeeId: number | null;
+  headEmployeeId: string | null;
   headEmployee: Employee | null;
   employees: Employee[];
   _count?: { employees: number };
@@ -74,8 +75,8 @@ export interface Department {
 }
 
 export interface EmployeeDocument {
-  id: number;
-  employeeId: number;
+  id: string;
+  employeeId: string;
   title: string;
   type: DocumentType;
   fileUrl: string;
@@ -84,8 +85,8 @@ export interface EmployeeDocument {
 }
 
 export interface AttendanceRecord {
-  id: number;
-  employeeId: number;
+  id: string;
+  employeeId: string;
   date: string;
   checkIn: string | null;
   checkOut: string | null;
@@ -97,8 +98,8 @@ export interface AttendanceRecord {
 }
 
 export interface LeaveRecord {
-  id: number;
-  employeeId: number;
+  id: string;
+  employeeId: string;
   leaveType: LeaveType;
   startDate: string;
   endDate: string;
@@ -106,15 +107,15 @@ export interface LeaveRecord {
   reason: string;
   status: LeaveStatus;
   reviewNote: string | null;
-  reviewedById: number | null;
+  reviewedById: string | null;
   reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface LeaveBalance {
-  id: number;
-  employeeId: number;
+  id: string;
+  employeeId: string;
   year: number;
   leaveType: LeaveType;
   total: number;
@@ -122,8 +123,8 @@ export interface LeaveBalance {
 }
 
 export interface SalaryStructure {
-  id: number;
-  employeeId: number;
+  id: string;
+  employeeId: string;
   basic: number;
   housing: number;
   transport: number;
@@ -135,8 +136,8 @@ export interface SalaryStructure {
 }
 
 export interface PayrollRecord {
-  id: number;
-  employeeId: number;
+  id: string;
+  employeeId: string;
   month: number;
   year: number;
   structureSnapshot: Record<string, number>;
@@ -149,8 +150,8 @@ export interface PayrollRecord {
 }
 
 export interface Activity {
-  id: number;
-  userId: number | null;
+  id: string;
+  userId: string | null;
   actorName: string;
   type: string;
   message: string;
@@ -158,8 +159,8 @@ export interface Activity {
 }
 
 export interface RefreshToken {
-  id: number;
-  userId: number;
+  id: string;
+  userId: string;
   tokenHash: string;
   expiresAt: string;
   revokedAt: string | null;
@@ -167,14 +168,14 @@ export interface RefreshToken {
 }
 
 export interface SystemSetting {
-  id: number;
+  id: string;
   key: string;
   value: string | null;
   updatedAt: string;
 }
 
 export interface Holiday {
-  id: number;
+  id: string;
   name: string;
   date: string;
 }

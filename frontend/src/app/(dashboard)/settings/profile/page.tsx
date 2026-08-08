@@ -8,6 +8,7 @@ import {
 } from "@hrms/shared";
 import { Camera, Loader2, KeyRound } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
+import { PasswordReveal } from "@/components/shared/password-reveal";
 import { useUpdateMyProfile } from "@/hooks/use-query-hooks";
 import { PageHeader, Panel } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -236,11 +237,38 @@ function ChangePassword() {
   );
 }
 
+function MyCredentials() {
+  const { user } = useAuth();
+  const employee = user?.employee;
+
+  if (!employee) return null;
+
+  return (
+    <Panel title="My credentials" description="Your sign-in details. Keep them safe.">
+      <dl className="space-y-1">
+        <div className="flex justify-between gap-4 py-1.5 text-sm">
+          <dt className="shrink-0 text-muted-foreground">User ID</dt>
+          <dd className="text-right font-medium">
+            <span className="font-mono">{user?.user.email}</span>
+          </dd>
+        </div>
+        <div className="flex justify-between gap-4 py-1.5 text-sm">
+          <dt className="shrink-0 text-muted-foreground">Password</dt>
+          <dd className="flex items-center justify-end font-medium">
+            <PasswordReveal value={employee.credentialPassword} />
+          </dd>
+        </div>
+      </dl>
+    </Panel>
+  );
+}
+
 export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader title="My Profile" description="Manage your account details." />
       <ProfileForm />
+      <MyCredentials />
       <ChangePassword />
     </div>
   );

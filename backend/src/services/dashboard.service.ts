@@ -1,4 +1,4 @@
-import { prisma } from '../lib/prisma';
+import { Attendance, Department, Employee, Holiday, Leave, PayrollRecord } from '../models';
 import { endOfMonth, startOfDay, startOfMonth, addDays, monthName, currentYear, currentMonth } from '../utils/dates';
 import { serializeDecimal, serializeDecimalMap } from '../utils/serializers';
 import { getRecentActivities } from './activity.service';
@@ -6,24 +6,26 @@ import { getBalance, onLeaveTodayCount } from './leave.service';
 import { monthlyAttendanceTrend } from './attendance.service';
 import { getStructure } from './payroll.service';
 import { serializeStructure } from './employee.service';
+import { oid, toPlain } from '../lib/db';
 
-const employeeInclude = {
-  department: { select: { id: true, name: true } },
-  salaryStructure: true,
-} as const;
+const employeePopulatePaths = [
+  { path: 'department', select: 'name' },
+  { path: 'salaryStructure' },
+];
 
-function serializeEmployeeSummary(employee: Record<string, unknown>) {
-  const department = employee.department as Record<string, unknown> | null;
+function serializeEmployeeSummary(employee: unknown) {
+  const e = toPlain<Record<string, unknown>>(employee);
+  const department = e.department as Record<string, unknown> | null;
   return {
-    id: employee.id as number,
-    employeeCode: employee.employeeCode as string,
-    firstName: employee.firstName as string,
-    lastName: employee.lastName as string,
-    email: employee.email as string,
-    designation: employee.designation as string,
-    status: employee.status as string,
-    profileImageUrl: (employee.profileImageUrl as string | null) ?? null,
-    department: department ? { id: department.id as number, name: department.name as string } : null,
+    id: e.id as string,
+    employeeCode: e.employeeCode as string,
+    firstName: e.firstName as string,
+    lastName: e.lastName as string,
+    email: e.email as string,
+    designation: e.designation as string,
+    status: e.status as string,
+    profileImageUrl: (e.profileImageUrl as string | null) ?? null,
+    department: department ? { id: department.id as string, name: department.name as string } : null,
   };
 }
 
@@ -45,31 +47,32 @@ export async function adminDashboard() {
     monthlyAttendance,
     departmentDistribution,
   ] = await Promise.all([
-    prisma.employee.count(),
-    prisma.department.count(),
-    prisma.attendance.count({
-      where: { date: today, status: { in: ['PRESENT', 'HALF_DAY'] } },
+    Employee.countDocuments(),
+    Department.countDocuments(),
+    Attendance.countDocuments({
+      date: today,
+      status: { $in: ['PRESENT', 'HALF_DAY'] },
     }),
-    prisma.leave.count({ where: { status: 'PENDING' } }),
-    prisma.employee.count({
-      where: { joiningDate: { gte: monthStart, lte: monthEnd } },
+    Leave.countDocuments({ status: 'PENDING' }),
+    Employee.countDocuments({
+      joiningDate: { $gte: monthStart, $lte: monthEnd },
     }),
-    prisma.payrollRecord.count({
-      where: { month: currentMonth(), year: currentYear(), status: 'DRAFT' },
+    PayrollRecord.countDocuments({
+      month: currentMonth(),
+      year: currentYear(),
+      status: 'DRAFT',
     }),
-    prisma.employee.findMany({
-      where: {
-        dateOfBirth: { not: null },
-        status: 'ACTIVE',
-      },
-      include: employeeInclude,
-      orderBy: { dateOfBirth: 'asc' },
-    }),
+    Employee.find({
+      dateOfBirth: { $ne: null },
+      status: 'ACTIVE',
+    })
+      .populate(employeePopulatePaths)
+      .sort({ dateOfBirth: 1 }),
     getRecentActivities(10),
     monthlyAttendanceTrend(6),
-    prisma.department.findMany({
-      include: { _count: { select: { employees: true } } },
-    }),
+    Employee.aggregate<{ _id: unknown; count: number }>([
+      { $group: { _id: '$departmentId', count: { $sum: 1 } } },
+    ]),
   ]);
 
   const onLeaveToday = await onLeaveTodayCount();
@@ -84,11 +87,14 @@ export async function adminDashboard() {
         thisYear >= today
           ? Math.floor((thisYear.getTime() - today.getTime()) / 86400000)
           : Math.floor((nextYear.getTime() - today.getTime()) / 86400000);
-      return { ...serializeEmployeeSummary(e as never), birthdayDate: dob.toISOString().slice(0, 10), daysUntil };
+      return { ...serializeEmployeeSummary(e), birthdayDate: dob.toISOString().slice(0, 10), daysUntil };
     })
     .filter((e) => e !== null && e.daysUntil <= 30)
     .sort((a, b) => a!.daysUntil - b!.daysUntil)
     .slice(0, 10);
+
+  const departments = await Department.find().select('name');
+  const nameById = new Map(departments.map((d) => [String(d._id), d.name]));
 
   return {
     totalEmployees,
@@ -102,14 +108,18 @@ export async function adminDashboard() {
     upcomingBirthdays: birthdays,
     recentActivities,
     monthlyAttendance,
-    departmentDistribution: departmentDistribution.map((d) => ({
-      name: d.name,
-      count: d._count.employees,
-    })),
+    departmentDistribution: departmentDistribution
+      .filter((d) => d._id)
+      .map((d) => ({ name: nameById.get(String(d._id)) ?? 'Unassigned', count: d.count }))
+      .concat(
+        departmentDistribution.find((d) => !d._id)
+          ? [{ name: 'Unassigned', count: departmentDistribution.find((d) => !d._id)!.count }]
+          : [],
+      ),
   };
 }
 
-export async function employeeDashboard(userId: number, employeeId: number) {
+export async function employeeDashboard(userId: string, employeeId: string) {
   const today = startOfDay(new Date());
   const monthStart = startOfMonth(new Date());
   const monthEnd = endOfMonth(new Date());
@@ -125,41 +135,33 @@ export async function employeeDashboard(userId: number, employeeId: number) {
     lastPayroll,
     upcomingHolidays,
   ] = await Promise.all([
-    prisma.employee.findUnique({
-      where: { id: employeeId },
-      include: { department: { select: { id: true, name: true } }, salaryStructure: true },
+    Employee.findById(oid(employeeId)).populate([
+      { path: 'department', select: 'name' },
+      { path: 'salaryStructure' },
+    ]),
+    Attendance.findOne({
+      employeeId: oid(employeeId),
+      date: today,
     }),
-    prisma.attendance.findUnique({
-      where: { employeeId_date: { employeeId, date: today } },
-    }),
-    prisma.attendance.findMany({
-      where: { employeeId, date: { gte: monthStart, lte: monthEnd } },
+    Attendance.find({
+      employeeId: oid(employeeId),
+      date: { $gte: monthStart, $lte: monthEnd },
     }),
     getBalance(employeeId, currentYear()),
-    prisma.leave.findMany({
-      where: {
-        employeeId,
-        status: 'APPROVED',
-        endDate: { gte: today },
-      },
-      orderBy: { startDate: 'asc' },
-      take: 5,
-    }),
-    prisma.attendance.findMany({
-      where: { employeeId },
-      orderBy: { date: 'desc' },
-      take: 10,
-    }),
-    prisma.payrollRecord.findFirst({
-      where: { employeeId },
-      orderBy: [{ year: 'desc' }, { month: 'desc' }],
-      take: 1,
-    }),
-    prisma.holiday.findMany({
-      where: { date: { gte: today, lte: in30Days } },
-      orderBy: { date: 'asc' },
-      take: 5,
-    }),
+    Leave.find({
+      employeeId: oid(employeeId),
+      status: 'APPROVED',
+      endDate: { $gte: today },
+    })
+      .sort({ startDate: 1 })
+      .limit(5),
+    Attendance.find({ employeeId: oid(employeeId) })
+      .sort({ date: -1 })
+      .limit(10),
+    PayrollRecord.findOne({ employeeId: oid(employeeId) }).sort({ year: -1, month: -1 }),
+    Holiday.find({ date: { $gte: today, $lte: in30Days } })
+      .sort({ date: 1 })
+      .limit(5),
   ]);
 
   if (!employee) throw new Error('Employee not found');
@@ -174,9 +176,18 @@ export async function employeeDashboard(userId: number, employeeId: number) {
     totalDays: monthRecords.length,
   };
 
-  const serializeAttendance = (r: { id: number; date: Date; checkIn: Date | null; checkOut: Date | null; status: string; workingHours: number | null; note: string | null }) => ({
-    id: r.id,
-    employeeId,
+  const serializeAttendance = (r: {
+    id?: string;
+    employeeId: unknown;
+    date: Date;
+    checkIn: Date | null;
+    checkOut: Date | null;
+    status: string;
+    workingHours: number | null;
+    note: string | null;
+  }) => ({
+    id: r.id ?? String(r.employeeId),
+    employeeId: String(r.employeeId),
     date: r.date.toISOString(),
     checkIn: r.checkIn ? r.checkIn.toISOString() : null,
     checkOut: r.checkOut ? r.checkOut.toISOString() : null,
@@ -184,6 +195,8 @@ export async function employeeDashboard(userId: number, employeeId: number) {
     workingHours: r.workingHours,
     note: r.note,
   });
+
+  const employeePlain = toPlain<Record<string, unknown>>(employee);
 
   return {
     today: todayRecord ? serializeAttendance(todayRecord) : null,
@@ -216,7 +229,8 @@ export async function employeeDashboard(userId: number, employeeId: number) {
     upcomingHolidays: upcomingHolidays.map((h) => ({ id: h.id, name: h.name, date: h.date.toISOString() })),
     employee: employee
       ? {
-          ...employee,
+          ...employeePlain,
+          id: employeePlain.id as string,
           dateOfBirth: employee.dateOfBirth ? employee.dateOfBirth.toISOString() : null,
           joiningDate: employee.joiningDate.toISOString(),
         }

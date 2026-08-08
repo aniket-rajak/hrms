@@ -38,6 +38,10 @@ export const changePasswordSchema = z.object({
 });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
+export const objectIdSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{24}$/, 'Invalid id format');
+
 const optionalDate = z
   .string()
   .refine((v) => !isNaN(Date.parse(v)), 'Invalid date')
@@ -59,11 +63,12 @@ const employeeBase = {
   designation: z.string().trim().min(2, 'Designation is required').max(100),
   joiningDate: z.string().refine((v) => !isNaN(Date.parse(v)), 'Joining date is required'),
   status: z.enum(EMPLOYEE_STATUSES),
-  departmentId: z.number().int().positive().nullable().optional(),
+  departmentId: objectIdSchema.nullable().optional(),
 };
 
 export const employeeCreateSchema = z.object({
   ...employeeBase,
+  password: z.string().trim().min(8, 'Password must be at least 8 characters').max(72).optional(),
   basic: z.number().min(0).optional(),
   housing: z.number().min(0).optional(),
   transport: z.number().min(0).optional(),
@@ -106,7 +111,7 @@ export const departmentCreateSchema = z.object({
     .max(20)
     .regex(/^[A-Za-z0-9-_]+$/, 'Only letters, numbers, dash and underscore allowed'),
   description: z.string().trim().max(500).optional().nullable().or(z.literal('')),
-  headEmployeeId: z.number().int().positive().nullable().optional(),
+  headEmployeeId: objectIdSchema.nullable().optional(),
 });
 export type DepartmentCreateInput = z.infer<typeof departmentCreateSchema>;
 

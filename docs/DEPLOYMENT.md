@@ -6,36 +6,38 @@ Free-tier friendly architecture:
 |---------|----------|-------|
 | Frontend | Vercel | Next.js 16 static + serverless |
 | Backend | Render (free web service) | Express on Node |
-| Database | Railway MySQL / Aiven MySQL | Free tiers available |
+| Database | MongoDB Atlas (M0 shared) | Free tier available |
 | Uploads | Cloudinary | Free tier (25k transformations) |
 
 ---
 
-## 1. Database (Railway MySQL)
+## 1. Database (MongoDB Atlas)
 
-1. Create a MySQL instance on Railway (or Aiven).
-2. Copy the connection string into Prisma format:
-   `mysql://user:password@host:port/dbname?sslaccept=strict`
-3. Deploy the schema once — run locally (or via a one-off job):
+1. Create a free **M0 shared-cluster** in MongoDB Atlas (MongoDB 6.4+, ~512 MB free).
+2. Copy the connection string in `mongodb+srv://` format:
+   `mongodb+srv://<user>:<password>@<cluster>.mongodb.net/hrms?retryWrites=true&w=majority`
+3. No schema migration is required — Mongoose creates collections and indexes from the model definitions on startup. Just run the seed once to load demo data:
    ```bash
    cd backend
-   npx prisma db push
    npm run seed  # optional demo data
    ```
+
+Alternative hosts: any MongoDB provider (Railway, DigitalOcean, self-hosted `mongod`).
 
 ## 2. Backend (Render)
 
 1. Create a new **Web Service** pointing at your repo.
 2. **Root directory:** `backend`
 3. **Build command:** `npm install && npm run build`
-4. **Start command:** `npm start` (runs `node dist/server.js`)
+4. **Start command:** `npm start` (runs `node dist/index.js`)
 5. **Environment variables:** copy from `backend/.env.example`:
    - `NODE_ENV=production`
-   - `DATABASE_URL` (from Railway, `sslaccept=strict`)
+   - `DATABASE_URL` (MongoDB Atlas connection string)
    - `JWT_SECRET`, `JWT_REFRESH_SECRET` (long random strings)
    - `FRONTEND_URL` → your Vercel URL
    - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
-   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+   - `EMAIL_PROVIDER`, `BREVO_API_KEY`, `EMAIL_FROM` (Brevo HTTP API — required on Render free, which blocks SMTP)
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (SMTP fallback)
 
 > **Important:** the `shared` workspace must be built before the backend. Add a root-level build or, simplest: change the backend build command to
 > `npm --prefix .. run build --workspace @hrms/shared && npm install && npm run build`
@@ -67,7 +69,7 @@ The refresh token is an httpOnly cookie. With frontend and backend on different 
 
 ## 5. Post-deploy checklist
 
-- [ ] `/api/health` returns `ok`
+- [ ] `/health` returns `ok`
 - [ ] Login works and session survives a page reload (refresh cookie)
 - [ ] Profile picture and document uploads work
 - [ ] Payslip PDF downloads

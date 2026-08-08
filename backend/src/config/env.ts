@@ -34,6 +34,11 @@ export const env = {
     pass: process.env.SMTP_PASS ?? '',
     from: process.env.SMTP_FROM ?? 'HRMS <no-reply@example.com>',
   },
+  email: {
+    provider: (process.env.EMAIL_PROVIDER ?? 'auto') as 'auto' | 'brevo' | 'smtp',
+    brevoApiKey: process.env.BREVO_API_KEY ?? '',
+    from: process.env.EMAIL_FROM ?? process.env.SMTP_FROM ?? 'HRMS <no-reply@example.com>',
+  },
   seed: {
     adminEmail: process.env.SEED_ADMIN_EMAIL ?? 'admin@hrms.com',
     adminPassword: process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123',

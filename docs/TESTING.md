@@ -74,7 +74,7 @@ The project has **no automated test suites** yet (no unit/integration/e2e runner
 
 Recommended setup when adding tests:
 
-- **Backend unit/integration**: Vitest + Supertest against a test MySQL DB (`DATABASE_URL` pointed at a `hrms_test` schema, `prisma db push` in a global setup).
+- **Backend unit/integration**: Vitest + Supertest against an in-memory MongoDB (`mongodb-memory-server`), or a dedicated `hrms_test` database via `DATABASE_URL` in a global setup.
 - **Frontend unit**: Vitest + React Testing Library for forms, hooks, and shared components.
 - **E2E**: Playwright against the seeded stack (login, create employee, apply leave, generate payroll, download slip).
 - Add `npm test` scripts per workspace and wire them into CI (GitHub Actions: install → build shared → typecheck → test → lint).

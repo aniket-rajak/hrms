@@ -1,9 +1,9 @@
 import app from './app';
 import { env } from './config/env';
-import { prisma } from './lib/prisma';
+import { connectDb } from './lib/db';
 
 async function main(): Promise<void> {
-  await prisma.$connect();
+  await connectDb(env.databaseUrl);
   console.log(`[hrms] Database connected (${env.nodeEnv})`);
 
   app.listen(env.port, () => {

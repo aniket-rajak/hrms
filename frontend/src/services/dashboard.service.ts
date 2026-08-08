@@ -93,6 +93,6 @@ export async function createHoliday(input: HolidayCreateInput): Promise<HolidayD
   return res.data.data!;
 }
 
-export async function deleteHoliday(id: number): Promise<void> {
+export async function deleteHoliday(id: string): Promise<void> {
   await api.delete(`/settings/holidays/${id}`);
 }

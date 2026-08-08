@@ -63,7 +63,7 @@ router.patch(
   authorize('ADMIN'),
   validate(leaveReviewSchema),
   asyncHandler(async (req: AuthRequest, res) => {
-    const result = await leaveService.reviewLeave(Number(req.params.id), 'APPROVE', req.user!, req.body.note);
+    const result = await leaveService.reviewLeave(req.params.id, 'APPROVE', req.user!, req.body.note);
     ok(res, result, 'Leave approved');
   }),
 );
@@ -73,7 +73,7 @@ router.patch(
   authorize('ADMIN'),
   validate(leaveReviewSchema),
   asyncHandler(async (req: AuthRequest, res) => {
-    const result = await leaveService.reviewLeave(Number(req.params.id), 'REJECT', req.user!, req.body.note);
+    const result = await leaveService.reviewLeave(req.params.id, 'REJECT', req.user!, req.body.note);
     ok(res, result, 'Leave rejected');
   }),
 );

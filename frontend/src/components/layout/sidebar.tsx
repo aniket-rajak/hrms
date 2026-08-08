@@ -12,6 +12,8 @@ import {
   Settings,
   UserCircle,
   LayoutDashboard,
+  CreditCard,
+  ReceiptText,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
@@ -32,7 +34,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/departments", label: "Departments", icon: Building2, adminOnly: true },
   { href: "/attendance", label: "Attendance", icon: CalendarCheck },
   { href: "/leaves", label: "Leave", icon: CalendarDays },
-  { href: "/payroll", label: "Payroll", icon: Wallet },
+  { href: "/payslips", label: "Payslips", icon: ReceiptText, employeeOnly: true },
+  { href: "/id-card", label: "ID Card", icon: CreditCard, employeeOnly: true },
+  { href: "/payroll/manage", label: "Payroll", icon: Wallet, adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: BarChart3, adminOnly: true },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
   { href: "/settings/profile", label: "My Profile", icon: UserCircle, employeeOnly: true },
@@ -51,11 +55,6 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
     if (item.adminOnly) return isAdmin;
     if (item.employeeOnly) return !isAdmin;
     return true;
-  }).map((item) => {
-    const href = isAdmin && item.href === "/attendance" ? "/attendance/manage" : item.href;
-    const href2 = isAdmin && item.href === "/leaves" ? "/leaves/manage" : href;
-    const href3 = isAdmin && item.href === "/payroll" ? "/payroll/manage" : href2;
-    return { ...item, href: href3 };
   });
 
   return (

@@ -10,7 +10,7 @@ export function useEmployees(params: {
   page?: number;
   pageSize?: number;
   search?: string;
-  departmentId?: number | null;
+  departmentId?: string | null;
   status?: string;
 }) {
   const query = useQuery({
@@ -20,7 +20,7 @@ export function useEmployees(params: {
   return query;
 }
 
-export function useEmployee(id: number) {
+export function useEmployee(id: string) {
   return useQuery({
     queryKey: ["employees", id],
     queryFn: () => employees.getEmployee(id),
@@ -50,7 +50,7 @@ export function useCreateEmployee() {
 export function useUpdateEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: number; input: Parameters<typeof employees.updateEmployee>[1] }) =>
+    mutationFn: ({ id, input }: { id: string; input: Parameters<typeof employees.updateEmployee>[1] }) =>
       employees.updateEmployee(id, input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["employees"] });
@@ -62,7 +62,7 @@ export function useUpdateEmployee() {
 export function useDeleteEmployee() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => employees.deleteEmployee(id),
+    mutationFn: (id: string) => employees.deleteEmployee(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["employees"] });
       void qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -74,12 +74,12 @@ export function useDeleteEmployee() {
 export function useProfileImage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, url }: { id: number; url: string }) => employees.updateProfileImage(id, url),
+    mutationFn: ({ id, url }: { id: string; url: string }) => employees.updateProfileImage(id, url),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["employees"] }),
   });
 }
 
-export function useSalaryStructure(employeeId: number) {
+export function useSalaryStructure(employeeId: string) {
   return useQuery({
     queryKey: ["salary-structure", employeeId],
     queryFn: () => employees.getSalaryStructure(employeeId),
@@ -90,7 +90,7 @@ export function useSalaryStructure(employeeId: number) {
 export function useUpsertSalaryStructure() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ employeeId, input }: { employeeId: number; input: Parameters<typeof employees.upsertSalaryStructure>[1] }) =>
+    mutationFn: ({ employeeId, input }: { employeeId: string; input: Parameters<typeof employees.upsertSalaryStructure>[1] }) =>
       employees.upsertSalaryStructure(employeeId, input),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["salary-structure"] }),
   });
@@ -114,7 +114,7 @@ export function useCreateDepartment() {
 export function useUpdateDepartment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: number; input: Parameters<typeof employees.updateDepartment>[1] }) =>
+    mutationFn: ({ id, input }: { id: string; input: Parameters<typeof employees.updateDepartment>[1] }) =>
       employees.updateDepartment(id, input),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["departments"] }),
   });
@@ -123,7 +123,7 @@ export function useUpdateDepartment() {
 export function useDeleteDepartment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => employees.deleteDepartment(id),
+    mutationFn: (id: string) => employees.deleteDepartment(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["departments"] });
       void qc.invalidateQueries({ queryKey: ["employees"] });
@@ -175,7 +175,7 @@ export function useAllAttendance(params: Parameters<typeof hr.getAllAttendance>[
 export function useUpdateAttendance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: number; input: Parameters<typeof hr.updateAttendance>[1] }) =>
+    mutationFn: ({ id, input }: { id: string; input: Parameters<typeof hr.updateAttendance>[1] }) =>
       hr.updateAttendance(id, input),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["attendance"] }),
   });
@@ -207,7 +207,7 @@ export function useApplyLeave() {
 export function useReviewLeave() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, action, note }: { id: number; action: "approve" | "reject"; note?: string }) =>
+    mutationFn: ({ id, action, note }: { id: string; action: "approve" | "reject"; note?: string }) =>
       hr.reviewLeave(id, action, note),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["leaves"] });

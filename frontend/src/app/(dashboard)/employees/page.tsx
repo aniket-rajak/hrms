@@ -9,6 +9,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState, ErrorState } from "@/components/shared/states";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { PasswordReveal } from "@/components/shared/password-reveal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,14 +46,14 @@ export default function EmployeesPage() {
     page,
     pageSize: 10,
     search: debouncedSearch || undefined,
-    departmentId: departmentId === "all" ? null : Number(departmentId),
+    departmentId: departmentId === "all" ? null : departmentId,
     status: status === "all" ? undefined : status,
   });
 
   const { data: departments } = useDepartments();
   const deleteEmployee = useDeleteEmployee();
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
       await deleteEmployee.mutateAsync(id);
       toast.success("Employee deleted");
@@ -135,6 +136,7 @@ export default function EmployeesPage() {
               <TableHead>Employee</TableHead>
               <TableHead className="hidden md:table-cell">Department</TableHead>
               <TableHead className="hidden sm:table-cell">Designation</TableHead>
+              <TableHead className="hidden lg:table-cell">User ID & Password</TableHead>
               <TableHead className="hidden lg:table-cell">Joining date</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -144,7 +146,7 @@ export default function EmployeesPage() {
             {isLoading &&
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Skeleton className="h-10" />
                   </TableCell>
                 </TableRow>
@@ -152,7 +154,7 @@ export default function EmployeesPage() {
 
             {!isLoading && isError && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <ErrorState message="Failed to load employees" onRetry={() => refetch()} />
                 </TableCell>
               </TableRow>
@@ -160,7 +162,7 @@ export default function EmployeesPage() {
 
             {!isLoading && !isError && data?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <EmptyState
                     title="No employees found"
                     description="Try adjusting your search or add a new employee."
@@ -194,6 +196,12 @@ export default function EmployeesPage() {
                     {employee.department?.name ?? "—"}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">{employee.designation}</TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <div className="flex items-start gap-2">
+                      <span className="max-w-36 truncate font-mono text-xs">{employee.email}</span>
+                      <PasswordReveal value={employee.credentialPassword} />
+                    </div>
+                  </TableCell>
                   <TableCell className="hidden lg:table-cell">{formatDate(employee.joiningDate)}</TableCell>
                   <TableCell>
                     <StatusBadge value={employee.status} />

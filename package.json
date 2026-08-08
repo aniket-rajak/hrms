@@ -2,7 +2,7 @@
   "name": "hr-management-system",
   "version": "1.0.0",
   "private": true,
-  "description": "Production-ready HR Management System - Next.js + Express + MySQL + TypeScript",
+  "description": "Production-ready HR Management System - Next.js + Express + MongoDB + TypeScript",
   "workspaces": [
     "shared",
     "backend",
@@ -17,7 +17,6 @@
     "build:backend": "npm run build --workspace backend",
     "build:frontend": "npm run build --workspace frontend",
     "seed": "npm run seed --workspace backend",
-    "db:push": "npm run db:push --workspace backend",
     "start:backend": "npm run start --workspace backend"
   },
   "engines": {

@@ -103,11 +103,24 @@ export async function downloadPdf(url: string): Promise<void> {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+  const disposition = response.headers?.["content-disposition"] as string | undefined;
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const downloadName = match?.[1] ?? (url.split("/").pop() ?? "document.pdf");
   const link = document.createElement("a");
   link.href = blobUrl;
-  link.download = url.split("/").pop() ?? "document.pdf";
+  link.download = downloadName;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   window.URL.revokeObjectURL(blobUrl);
+}
+
+export async function openPdf(url: string): Promise<void> {
+  const token = getAccessToken();
+  const response = await api.get(url, {
+    responseType: "blob",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+  window.open(blobUrl, "_blank");
 }

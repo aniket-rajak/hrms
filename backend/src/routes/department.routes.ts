@@ -21,7 +21,7 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(async (req: AuthRequest, res) => {
-    const department = await departmentService.getDepartment(Number(req.params.id));
+    const department = await departmentService.getDepartment(req.params.id);
     ok(res, department);
   }),
 );
@@ -41,7 +41,7 @@ router.patch(
   authorize('ADMIN'),
   validate(departmentUpdateSchema),
   asyncHandler(async (req: AuthRequest, res) => {
-    const department = await departmentService.updateDepartment(Number(req.params.id), req.body, req.user!);
+    const department = await departmentService.updateDepartment(req.params.id, req.body, req.user!);
     ok(res, department, 'Department updated');
   }),
 );
@@ -50,7 +50,7 @@ router.delete(
   '/:id',
   authorize('ADMIN'),
   asyncHandler(async (req: AuthRequest, res) => {
-    await departmentService.deleteDepartment(Number(req.params.id), req.user!);
+    await departmentService.deleteDepartment(req.params.id, req.user!);
     ok(res, { deleted: true }, 'Department deleted');
   }),
 );

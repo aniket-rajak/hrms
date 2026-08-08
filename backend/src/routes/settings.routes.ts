@@ -81,7 +81,7 @@ router.delete(
   '/holidays/:id',
   authorize('ADMIN'),
   asyncHandler(async (req: AuthRequest, res) => {
-    await settingsService.deleteHoliday(Number(req.params.id), req.user!);
+    await settingsService.deleteHoliday(req.params.id, req.user!);
     ok(res, { deleted: true }, 'Holiday removed');
   }),
 );

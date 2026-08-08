@@ -1,8 +1,20 @@
-import { PrismaClient, EmployeeStatus, Gender, LeaveType, Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { connectDb, disconnectDb } from '../src/lib/db';
+import { env } from '../src/config/env';
+import { encryptPassword } from '../src/lib/password-cipher';
 import { currentYear } from '../src/utils/dates';
-
-const prisma = new PrismaClient();
+import {
+  Activity,
+  Attendance,
+  Department,
+  Employee,
+  Holiday,
+  Leave,
+  LeaveBalance,
+  SalaryStructure,
+  SystemSetting,
+  User,
+} from '../src/models';
 
 const now = new Date();
 
@@ -39,24 +51,28 @@ async function upsertSettings(): Promise<void> {
     casualLeaveQuota: '5',
   };
   for (const [key, value] of Object.entries(settings)) {
-    await prisma.systemSetting.upsert({
-      where: { key },
-      update: { value },
-      create: { key, value },
-    });
+    await SystemSetting.findOneAndUpdate(
+      { key },
+      { value },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
   }
+  console.log('  Settings upserted');
 }
 
 async function seedAdmin(): Promise<void> {
-  const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@hrms.com';
-  const password = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123';
+  const email = env.seed.adminEmail;
+  const password = env.seed.adminPassword;
   const passwordHash = await bcrypt.hash(password, 10);
 
-  await prisma.user.upsert({
-    where: { email },
-    update: { role: 'ADMIN', status: 'ACTIVE' },
-    create: { email, passwordHash, role: 'ADMIN', status: 'ACTIVE' },
-  });
+  await User.findOneAndUpdate(
+    { email },
+    {
+      $set: { role: 'ADMIN', status: 'ACTIVE', passwordCipher: encryptPassword(password) },
+      $setOnInsert: { email, passwordHash },
+    },
+    { upsert: true, setDefaultsOnInsert: true },
+  );
   console.log(`  Admin: ${email} / ${password}`);
 }
 
@@ -65,65 +81,65 @@ const seedEmployees = [
     firstName: 'John',
     lastName: 'Smith',
     email: 'john.smith@acme.com',
-    gender: 'MALE' as Gender,
+    gender: 'MALE',
     dateOfBirth: dateOnly(-9000),
     phone: '+1 555 0101',
     designation: 'Senior Software Engineer',
     department: 'Engineering',
     joiningOffset: -720,
-    status: 'ACTIVE' as EmployeeStatus,
+    status: 'ACTIVE',
     structure: { basic: 5500, housing: 1200, transport: 300, medical: 200, otherAllowances: 250, deductions: 500 },
   },
   {
     firstName: 'Sarah',
     lastName: 'Johnson',
     email: 'sarah.johnson@acme.com',
-    gender: 'FEMALE' as Gender,
+    gender: 'FEMALE',
     dateOfBirth: dateOnly(-12000),
     phone: '+1 555 0102',
     designation: 'HR Manager',
     department: 'Human Resources',
     joiningOffset: -600,
-    status: 'ACTIVE' as EmployeeStatus,
+    status: 'ACTIVE',
     structure: { basic: 4200, housing: 900, transport: 250, medical: 180, otherAllowances: 200, deductions: 420 },
   },
   {
     firstName: 'Michael',
     lastName: 'Brown',
     email: 'michael.brown@acme.com',
-    gender: 'MALE' as Gender,
+    gender: 'MALE',
     dateOfBirth: dateOnly(-6600),
     phone: '+1 555 0103',
     designation: 'Sales Executive',
     department: 'Sales',
     joiningOffset: -300,
-    status: 'ACTIVE' as EmployeeStatus,
+    status: 'ACTIVE',
     structure: { basic: 2800, housing: 600, transport: 400, medical: 150, otherAllowances: 300, deductions: 300 },
   },
   {
     firstName: 'Emily',
     lastName: 'Davis',
     email: 'emily.davis@acme.com',
-    gender: 'FEMALE' as Gender,
+    gender: 'FEMALE',
     dateOfBirth: dateOnly(-450),
     phone: '+1 555 0104',
     designation: 'Marketing Specialist',
     department: 'Marketing',
     joiningOffset: -120,
-    status: 'ACTIVE' as EmployeeStatus,
+    status: 'ACTIVE',
     structure: { basic: 3200, housing: 700, transport: 250, medical: 160, otherAllowances: 200, deductions: 320 },
   },
   {
     firstName: 'David',
     lastName: 'Wilson',
     email: 'david.wilson@acme.com',
-    gender: 'MALE' as Gender,
+    gender: 'MALE',
     dateOfBirth: dateOnly(-10000),
     phone: '+1 555 0105',
     designation: 'Accountant',
     department: 'Finance',
     joiningOffset: -45,
-    status: 'ACTIVE' as EmployeeStatus,
+    status: 'ACTIVE',
     structure: { basic: 3600, housing: 800, transport: 200, medical: 170, otherAllowances: 150, deductions: 360 },
   },
 ];
@@ -132,64 +148,65 @@ async function seedEmployeesData(): Promise<void> {
   const year = currentYear();
 
   for (const seed of seedEmployees) {
-    const existing = await prisma.employee.findUnique({ where: { email: seed.email } });
+    const existing = await Employee.findOne({ email: seed.email });
     if (existing) {
       console.log(`  Employee already exists: ${seed.email}`);
       continue;
     }
 
-    const department = await prisma.department.findUnique({ where: { name: seed.department } });
+    const department = await Department.findOne({ name: seed.department });
     if (!department) {
       console.warn(`  Department missing: ${seed.department}`);
       continue;
     }
 
     const passwordHash = await bcrypt.hash('Welcome@123', 10);
-    const user = await prisma.user.create({
-      data: { email: seed.email, passwordHash, role: 'EMPLOYEE', status: 'ACTIVE' },
+    const passwordCipher = encryptPassword('Welcome@123');
+    const user = await User.create({
+      email: seed.email,
+      passwordHash,
+      passwordCipher,
+      role: 'EMPLOYEE',
+      status: 'ACTIVE',
     });
 
-    const count = await prisma.employee.count();
-    const employee = await prisma.employee.create({
-      data: {
-        userId: user.id,
-        employeeCode: `EMP-${String(count + 1).padStart(4, '0')}`,
-        firstName: seed.firstName,
-        lastName: seed.lastName,
-        email: seed.email,
-        phone: seed.phone,
-        gender: seed.gender,
-        dateOfBirth: seed.dateOfBirth,
-        designation: seed.designation,
-        joiningDate: daysAgo(seed.joiningOffset),
-        status: seed.status,
-        departmentId: department.id,
-        salaryStructure: {
-          create: {
-            ...seed.structure,
-            netSalary:
-              seed.structure.basic + seed.structure.housing + seed.structure.transport +
-              seed.structure.medical + seed.structure.otherAllowances - seed.structure.deductions,
-          },
-        },
-      },
+    const count = await Employee.countDocuments();
+    const employee = await Employee.create({
+      userId: user._id,
+      employeeCode: `EMP-${String(count + 1).padStart(4, '0')}`,
+      firstName: seed.firstName,
+      lastName: seed.lastName,
+      email: seed.email,
+      phone: seed.phone,
+      gender: seed.gender,
+      dateOfBirth: seed.dateOfBirth,
+      designation: seed.designation,
+      joiningDate: daysAgo(seed.joiningOffset),
+      status: seed.status,
+      departmentId: department._id,
     });
 
-    await prisma.leaveBalance.createMany({
-      data: [
-        { employeeId: employee.id, year, leaveType: 'ANNUAL', total: 15, used: 3 },
-        { employeeId: employee.id, year, leaveType: 'SICK', total: 10, used: 1 },
-        { employeeId: employee.id, year, leaveType: 'CASUAL', total: 5, used: 0 },
-        { employeeId: employee.id, year, leaveType: 'UNPAID', total: 0, used: 0 },
-      ],
+    await SalaryStructure.create({
+      employeeId: employee._id,
+      ...seed.structure,
+      netSalary:
+        seed.structure.basic + seed.structure.housing + seed.structure.transport +
+        seed.structure.medical + seed.structure.otherAllowances - seed.structure.deductions,
     });
+
+    await LeaveBalance.create([
+      { employeeId: employee._id, year, leaveType: 'ANNUAL', total: 15, used: 3 },
+      { employeeId: employee._id, year, leaveType: 'SICK', total: 10, used: 1 },
+      { employeeId: employee._id, year, leaveType: 'CASUAL', total: 5, used: 0 },
+      { employeeId: employee._id, year, leaveType: 'UNPAID', total: 0, used: 0 },
+    ]);
     console.log(`  Employee: ${seed.firstName} ${seed.lastName} (${employee.employeeCode})`);
   }
 }
 
 async function seedAttendance(): Promise<void> {
-  const employees = await prisma.employee.findMany({ where: { status: 'ACTIVE' } });
-  const existing = await prisma.attendance.count();
+  const employees = await Employee.find({ status: 'ACTIVE' });
+  const existing = await Attendance.countDocuments();
   if (existing > 0) {
     console.log('  Attendance already seeded');
     return;
@@ -211,15 +228,13 @@ async function seedAttendance(): Promise<void> {
 
       const hours = (checkOut.getTime() - checkIn.getTime()) / 3600000;
 
-      await prisma.attendance.create({
-        data: {
-          employeeId: employee.id,
-          date,
-          checkIn,
-          checkOut,
-          workingHours: Math.round(hours * 100) / 100,
-          status: hours >= 7.5 ? 'PRESENT' : 'HALF_DAY',
-        },
+      await Attendance.create({
+        employeeId: employee._id,
+        date,
+        checkIn,
+        checkOut,
+        workingHours: Math.round(hours * 100) / 100,
+        status: hours >= 7.5 ? 'PRESENT' : 'HALF_DAY',
       });
     }
   }
@@ -227,54 +242,48 @@ async function seedAttendance(): Promise<void> {
 }
 
 async function seedLeaves(): Promise<void> {
-  const employees = await prisma.employee.findMany({ where: { status: 'ACTIVE' }, take: 3 });
-  const existing = await prisma.leave.count();
+  const employees = await Employee.find({ status: 'ACTIVE' }).limit(3);
+  const existing = await Leave.countDocuments();
   if (existing > 0) {
     console.log('  Leaves already seeded');
     return;
   }
 
-  const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+  const admin = await User.findOne({ role: 'ADMIN' });
 
-  const pending = await prisma.leave.create({
-    data: {
-      employeeId: employees[0].id,
-      leaveType: 'ANNUAL',
-      startDate: inDays(7),
-      endDate: inDays(9),
-      days: 3,
-      reason: 'Family trip',
-      status: 'PENDING',
-    },
+  const pending = await Leave.create({
+    employeeId: employees[0]._id,
+    leaveType: 'ANNUAL',
+    startDate: inDays(7),
+    endDate: inDays(9),
+    days: 3,
+    reason: 'Family trip',
+    status: 'PENDING',
   });
-  console.log(`  Pending leave: #${pending.id}`);
+  console.log(`  Pending leave: #${pending._id}`);
 
   if (admin) {
-    await prisma.leave.create({
-      data: {
-        employeeId: employees[1].id,
-        leaveType: 'SICK',
-        startDate: daysAgo(5),
-        endDate: daysAgo(4),
-        days: 2,
-        reason: 'Medical appointment',
-        status: 'APPROVED',
-        reviewedById: admin.id,
-        reviewedAt: now,
-      },
+    await Leave.create({
+      employeeId: employees[1]._id,
+      leaveType: 'SICK',
+      startDate: daysAgo(5),
+      endDate: daysAgo(4),
+      days: 2,
+      reason: 'Medical appointment',
+      status: 'APPROVED',
+      reviewedById: admin._id,
+      reviewedAt: now,
     });
-    await prisma.leave.create({
-      data: {
-        employeeId: employees[2].id,
-        leaveType: 'CASUAL',
-        startDate: daysAgo(3),
-        endDate: daysAgo(3),
-        days: 1,
-        reason: 'Personal errand',
-        status: 'APPROVED',
-        reviewedById: admin.id,
-        reviewedAt: now,
-      },
+    await Leave.create({
+      employeeId: employees[2]._id,
+      leaveType: 'CASUAL',
+      startDate: daysAgo(3),
+      endDate: daysAgo(3),
+      days: 1,
+      reason: 'Personal errand',
+      status: 'APPROVED',
+      reviewedById: admin._id,
+      reviewedAt: now,
     });
   }
 }
@@ -288,17 +297,18 @@ async function seedHolidays(): Promise<void> {
     { name: 'Christmas', date: new Date(currentYear(), 11, 25) },
   ];
   for (const holiday of holidays) {
-    await prisma.holiday.upsert({
-      where: { date_name: { date: holiday.date, name: holiday.name } },
-      update: {},
-      create: holiday,
-    });
+    await Holiday.findOneAndUpdate(
+      { date: holiday.date, name: holiday.name },
+      { $setOnInsert: holiday },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
   }
   console.log('  Holidays seeded');
 }
 
 async function main(): Promise<void> {
   console.log('[seed] Starting...');
+  await connectDb(env.databaseUrl);
   await upsertSettings();
 
   const departments = [
@@ -310,11 +320,11 @@ async function main(): Promise<void> {
     { name: 'Operations', code: 'OPS', description: 'Day to day business operations' },
   ];
   for (const department of departments) {
-    await prisma.department.upsert({
-      where: { code: department.code },
-      update: {},
-      create: department,
-    });
+    await Department.findOneAndUpdate(
+      { code: department.code },
+      { $setOnInsert: department },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
   }
   console.log('  Departments seeded');
 
@@ -324,10 +334,10 @@ async function main(): Promise<void> {
   await seedLeaves();
   await seedHolidays();
 
-  await prisma.activity.createMany({
-    data: [
-      { type: 'SYSTEM', actorName: 'system', message: 'Database seeded successfully' },
-    ],
+  await Activity.create({
+    type: 'SYSTEM',
+    actorName: 'system',
+    message: 'Database seeded successfully',
   });
 
   console.log('[seed] Done.');
@@ -338,4 +348,4 @@ main()
     console.error('[seed] Failed:', err);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => disconnectDb());

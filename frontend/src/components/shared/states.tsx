@@ -37,7 +37,7 @@ export function ErrorState({
       {onRetry && (
         <button
           onClick={onRetry}
-          className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+          className="cursor-pointer text-xs font-medium text-primary underline-offset-4 hover:underline"
         >
           Try again
         </button>

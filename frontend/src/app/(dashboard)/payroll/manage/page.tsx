@@ -134,7 +134,7 @@ export default function PayrollManagePage() {
   const markPaid = useMarkPaid();
   const deleteRecord = useDeletePayrollRecord();
 
-  const handleMarkPaid = async (id: number) => {
+  const handleMarkPaid = async (id: string) => {
     try {
       await markPaid.mutateAsync(id);
       toast.success("Record marked as paid");
@@ -143,7 +143,7 @@ export default function PayrollManagePage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
       await deleteRecord.mutateAsync(id);
       toast.success("Payroll record deleted");
@@ -152,7 +152,7 @@ export default function PayrollManagePage() {
     }
   };
 
-  const handleDownload = async (id: number) => {
+  const handleDownload = async (id: string) => {
     try {
       await downloadPdf(slipDownloadUrl(id));
     } catch (err) {

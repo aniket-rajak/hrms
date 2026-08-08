@@ -10,7 +10,8 @@ import {
   GENDER_LABELS,
   EMPLOYEE_STATUS_LABELS,
 } from "@hrms/shared";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,7 @@ export function EmployeeForm({
   submitLabel?: string;
 }) {
   const { data: departments } = useDepartments();
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -63,6 +65,7 @@ export function EmployeeForm({
       joiningDate: "",
       status: "ACTIVE",
       departmentId: undefined,
+      password: "",
       basic: 0,
       housing: 0,
       transport: 0,
@@ -137,7 +140,7 @@ export function EmployeeForm({
           <Label>Department</Label>
           <Select
             value={watch("departmentId") ? String(watch("departmentId")) : "none"}
-            onValueChange={(v) => setValue("departmentId", v === "none" ? undefined : Number(v))}
+            onValueChange={(v) => setValue("departmentId", v === "none" ? undefined : v)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select department" />
@@ -167,6 +170,37 @@ export function EmployeeForm({
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className={sectionTitle}>Login credentials</div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-2">
+          <Label htmlFor="password">Temporary password *</Label>
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              placeholder="Set a starting password (min 8 chars)"
+              autoComplete="new-password"
+              className="pr-10"
+              {...register("password")}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="absolute right-1 top-1/2 -translate-y-1/2"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={() => setShowPassword((s) => !s)}
+            >
+              {showPassword ? <EyeOff /> : <Eye />}
+            </Button>
+          </div>
+          {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+        </div>
+        <p className="flex items-end pb-1 text-xs text-muted-foreground">
+          The employee uses this password to sign in — give it to them securely.
+        </p>
       </div>
 
       <div className={sectionTitle}>Salary structure</div>

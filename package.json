@@ -22,7 +22,7 @@
   "engines": {
     "node": ">=20"
   },
-  "devDependencies": {
+  "dependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^26.2.0",
     "@types/nodemailer": "^8.0.1",

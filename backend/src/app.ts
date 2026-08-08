@@ -2,7 +2,7 @@ import express, { Application } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { env } from './config/env';
+import { isAllowedOrigin } from './config/env';
 import { errorHandler, notFoundHandler } from './lib/errors';
 import routes from './routes';
 
@@ -11,7 +11,7 @@ const app: Application = express();
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
   cors({
-    origin: env.corsOrigins,
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
     credentials: true,
   }),
 );

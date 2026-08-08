@@ -20,6 +20,16 @@ const corsOrigins = [
   ]),
 ];
 
+const vercelOriginPattern = /^https:\/\/([a-z0-9-]+\.)+vercel\.app$/;
+
+export function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return false;
+  if (corsOrigins.includes(origin)) return true;
+  if (origin === 'http://localhost:3000') return true;
+  if (process.env.NODE_ENV === 'production' && vercelOriginPattern.test(origin)) return true;
+  return false;
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   isProduction: process.env.NODE_ENV === 'production',

@@ -10,6 +10,16 @@ function required(name: string): string {
   return value ?? '';
 }
 
+const corsOrigins = [
+  ...new Set([
+    process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    ...(process.env.CORS_ORIGINS ?? 'http://localhost:3000')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ]),
+];
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -43,5 +53,5 @@ export const env = {
     adminEmail: process.env.SEED_ADMIN_EMAIL ?? 'admin@hrms.com',
     adminPassword: process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123',
   },
-  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000').split(',').map((s) => s.trim()),
+  corsOrigins,
 } as const;

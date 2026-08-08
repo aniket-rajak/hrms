@@ -36,8 +36,8 @@ Live deployment: **https://hrms-9ypm.onrender.com** (health check `/health`).
    - `NODE_ENV=production`
    - `DATABASE_URL` (MongoDB Atlas connection string)
    - `JWT_SECRET`, `JWT_REFRESH_SECRET` (long random strings)
-   - `CORS_ORIGINS` → comma-separated frontend origins, e.g. `https://<your-app>.vercel.app,http://localhost:3000`
-   - `FRONTEND_URL` → your Vercel URL (used for password-reset links)
+   - `FRONTEND_URL` → your Vercel URL — **this is the single source of truth**: it is used for password-reset links AND is automatically added to the CORS allow-list (the local frontend `http://localhost:3000` is always allowed too, so local dev keeps working without extra config)
+   - `CORS_ORIGINS` → *optional* extra comma-separated origins on top of `FRONTEND_URL` (e.g. staged preview domains)
    - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
    - `EMAIL_PROVIDER`, `BREVO_API_KEY`, `EMAIL_FROM` (Brevo HTTP API — required on Render free, which blocks SMTP)
    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (SMTP fallback)
@@ -59,6 +59,11 @@ Live deployment: **https://hrms-9ypm.onrender.com** (health check `/health`).
 5. Environment variables (must be set for the production build):
    - `NEXT_PUBLIC_API_URL` → `https://hrms-9ypm.onrender.com/api` (production backend)
    - `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` → your cloud name (fallback for image URLs; uploads are signed by the backend `/uploads/signature`)
+
+### Local dev vs production (no configuration overlap)
+
+- **Local:** `backend/.env` keeps `FRONTEND_URL=http://localhost:3000` and `frontend/.env` keeps `NEXT_PUBLIC_API_URL=http://localhost:5000/api` — works out of the box.
+- **Production:** set `NEXT_PUBLIC_API_URL=https://hrms-9ypm.onrender.com/api` in **Vercel** env vars and `FRONTEND_URL=https://<app>.vercel.app` in **Render** env vars. The backend derives its CORS allow-list from `FRONTEND_URL`, and `NODE_ENV=production` flips the refresh-token cookie to `Secure; SameSite=None`, which is required for cross-origin (Vercel ↔ Render) usage.
 
 ### Vercel + Render cookie caveat
 

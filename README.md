@@ -55,7 +55,7 @@ hr-management-system/
         ├── lib/      # api client, format utils, cloudinary upload
         ├── providers/ # auth provider, query client, theme
         ├── services/  # typed API callers
-        └── proxy.ts   # Next.js middleware (auth route guard)
+        └── middleware/ # auth route guarding is fully client-side (no server middleware)
 ```
 
 ## 👥 User Roles
@@ -84,7 +84,7 @@ hr-management-system/
 - bcrypt password hashing, admins set a starting password per employee (customizable on creation)
 - A recoverable copy of each password is stored **AES-256-GCM encrypted** (key derived from `JWT_SECRET`) so admins/employees can view credentials — kept in sync on password change and reset
 - Refresh tokens stored hashed, rotated on every refresh, revoked on logout
-- Helmet, CORS (frontend origin only), per-route rate limiting
+- Helmet, CORS (local dev origin + production Vercel origins auto-allowed), per-route rate limiting
 - Zod validation on every endpoint; users can only access their own data
 - Payroll PDFs and records require admin or the owner employee
 
@@ -94,7 +94,7 @@ Dev copies are already created: `backend/.env` and `frontend/.env` (working dev 
 
 | Scope | Variables |
 |-------|-----------|
-| Local backend (`backend/.env`) | `FRONTEND_URL=http://localhost:3000` (default — drives CORS + reset links) |
+| Local backend (`backend/.env`) | `FRONTEND_URL=http://localhost:3000` (drives reset links; local dev origin is always CORS-allowed) |
 | Render (production backend) | `NODE_ENV=production`, `FRONTEND_URL=https://hrms-frontend-five-ivory.vercel.app`, `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CLOUDINARY_*`, `EMAIL_PROVIDER`/`BREVO_API_KEY`/`SMTP_*` |
 | Vercel (production frontend) | `NEXT_PUBLIC_API_URL=https://hrms-9ypm.onrender.com/api`, `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=doowwkmbe` |
 
@@ -143,7 +143,7 @@ Free-tier friendly: **Vercel** (frontend), **Render** (backend), **MongoDB Atlas
 
 - **Frontend** → Vercel: import the repo, root directory `frontend`, env vars `NEXT_PUBLIC_API_URL` + `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`
 - **Backend** → Render: whole repo, build `npm install && npm run build --workspace @hrms/backend`, start `npm start --workspace backend`, env vars `NODE_ENV=production`, `FRONTEND_URL`, `DATABASE_URL`, JWT + Cloudinary + email secrets
-- `FRONTEND_URL` is the single source of truth for CORS — the local origin `http://localhost:3000` is always allowed too, so local dev and production coexist.
+- `FRONTEND_URL` drives reset links; CORS automatically allows `http://localhost:3000` and any production `*.vercel.app` frontend origin, so local dev, the live frontend, and Vercel preview deploys coexist without CORS changes.
 
 ## 📋 Pending Tasks (To Be Completed Later)
 
@@ -173,6 +173,7 @@ Free-tier friendly: **Vercel** (frontend), **Render** (backend), **MongoDB Atlas
 - [x] Deploy backend to Render with production env vars → https://hrms-9ypm.onrender.com
 - [x] Deploy frontend to Vercel → https://hrms-frontend-five-ivory.vercel.app
 - [x] Cross-origin auth (cookies + CORS) verified for Vercel ↔ Render
+- [x] Production login → dashboard flow verified (removed the server-side proxy cookie gate that blocked dashboard navigation — auth guarding is now fully client-side)
 - [ ] Post-deploy checklist (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 
 ## 🗺️ Future Improvements
